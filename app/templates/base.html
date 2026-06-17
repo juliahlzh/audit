@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FEWS</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div>
+                <h1>FEWS</h1>
+                <p class="muted">Fraud Early Warning System</p>
+            </div>
+            {% if user %}
+            <nav class="nav">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/branch-inputs">Upload Excel</a>
+                <a href="/alerts">Alert Center</a>
+                <a href="/reports">Laporan</a>
+                {% if user.role in ["admin", "auditor"] %}
+                <form method="post" action="/matching/run">
+                    <button class="nav-button" type="submit">Jalankan Deteksi Ulang</button>
+                </form>
+                {% endif %}
+                <a href="/logs">Riwayat Sistem</a>
+                <a href="/reports/excel">Export Excel</a>
+                <a href="/reports/pdf">Export PDF</a>
+                <a href="/logout">Logout</a>
+            </nav>
+            {% endif %}
+        </aside>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

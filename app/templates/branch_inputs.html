@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Upload Data Approval</h2>
+        <p class="muted">Upload satu file Excel approval, FEWS akan otomatis mendeteksi indikasi fraud.</p>
+    </div>
+</div>
+
+{% if msg %}
+<div class="alert {{ 'red' if failed > 0 else 'ok' }}">
+    {{ msg }}. Berhasil: {{ imported }} baris{% if failed > 0 %}, gagal: {{ failed }} baris{% endif %}.
+</div>
+{% endif %}
+
+{% if user.role in ["admin", "auditor"] %}
+<div class="card form-card">
+    <h3>Upload Excel</h3>
+    <p class="muted">
+        Header fleksibel. Unduh template standar agar import lebih aman.
+    </p>
+    <div class="action-row">
+        <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template Excel</a>
+    </div>
+    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data">
+        <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+        <button type="submit">Upload Excel & Jalankan Deteksi</button>
+    </form>
+</div>
+
+<div class="card">
+    <details>
+        <summary><strong>Input Manual (Opsional)</strong></summary>
+        <div class="details-body">
+            <form method="post" action="/branch-inputs/new">
+                <div class="grid two">
+                    <div><label>Tanggal transaksi</label><input type="date" name="transaction_date" required></div>
+                    <div><label>Nama cabang</label><input type="text" name="branch_name" required></div>
+                    <div><label>Nama customer</label><input type="text" name="customer_name" required></div>
+                    <div><label>Nominal harus bayar</label><input type="number" name="amount_should_pay" min="0" step="0.01" required></div>
+                    <div><label>Nominal input cabang</label><input type="number" name="amount_input_branch" min="0" step="0.01" required></div>
+                    <div><label>Metode pembayaran</label><select name="payment_method" required><option value="transfer">transfer</option><option value="tunai">tunai</option></select></div>
+                    <div><label>Kode unik / invoice</label><input type="text" name="invoice_code" required></div>
+                    <div><label>Tanggal bank (opsional)</label><input type="date" name="bank_date"></div>
+                    <div><label>Tanggal setoran (opsional)</label><input type="date" name="deposit_date"></div>
+                    <div><label>Waktu pembayaran diterima (opsional)</label><input type="datetime-local" name="payment_received_at"></div>
+                    <div><label>ID Petugas Input (opsional)</label><input type="text" name="officer_id"></div>
+                    <div><label>ID Petugas Setoran (opsional)</label><input type="text" name="deposit_officer_id"></div>
+                    <div><label>ID Approver (opsional)</label><input type="text" name="approver_id"></div>
+                    <div><label>Bank tujuan (opsional)</label><input type="text" name="bank_target"></div>
+                    <div><label>Bank pada bukti (opsional)</label><input type="text" name="proof_bank"></div>
+                    <div><label>Rekening penerimaan (opsional)</label><input type="text" name="destination_account"></div>
+                    <div><label>Nomor bukti transaksi (opsional)</label><input type="text" name="proof_reference"></div>
+                    <div><label>Daftar siswa setoran kolektif (opsional)</label><input type="text" name="student_list"></div>
+                    <div><label>Jam transaksi (opsional)</label><input type="text" name="transaction_time" placeholder="Contoh: 23:15"></div>
+                    <div><label>Waktu approve (opsional)</label><input type="datetime-local" name="approved_at"></div>
+                    <div><label>Keterangan</label><input type="text" name="notes"></div>
+                </div>
+                <button type="submit">Simpan Input Manual</button>
+            </form>
+        </div>
+    </details>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="section-heading">
+        <div>
+            <h3>Data Approval Terbaru</h3>
+            <p class="muted">Sesuai SOP, data tidak dihapus permanen. Gunakan arsip/koreksi agar jejak audit tetap tersimpan.</p>
+        </div>
+        {% if rows and user.role in ["admin", "auditor"] %}
+        <form method="post" action="/branch-inputs/delete-all" onsubmit="return confirm('Arsipkan semua data approval aktif? Jejak audit tetap tersimpan.');">
+            <input type="hidden" name="correction_reason" value="Arsip semua data untuk koreksi monitoring">
+            <button class="danger-button compact-button" type="submit">Arsipkan Semua</button>
+        </form>
+        {% endif %}
+    </div>
+    <table>
+        <thead><tr><th>ID</th><th>Tanggal</th><th>Cabang</th><th>Customer</th><th>Invoice</th><th>Nominal Input</th><th>Aksi</th></tr></thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>#{{ row.id }}</td>
+                <td>{{ row.transaction_date|date_id }}</td>
+                <td>{{ row.branch_name }}</td>
+                <td>{{ row.customer_name }}</td>
+                <td>{{ row.invoice_code }}</td>
+                <td>Rp {{ "{:,.0f}".format(row.amount_input_branch) }}</td>
+                <td>
+                    {% if user.role in ["admin", "auditor"] %}
+                    <form method="post" action="/branch-inputs/{{ row.id }}/delete" onsubmit="return confirm('Arsipkan data approval #{{ row.id }} untuk koreksi?');">
+                        <input type="hidden" name="correction_reason" value="Koreksi data approval #{{ row.id }}">
+                        <button class="danger-button compact-button" type="submit">Arsip/Koreksi</button>
+                    </form>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">Belum ada data approval.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

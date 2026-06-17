@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Laporan Periodik FEWS</h2>
+        <p class="muted">Ringkasan monitoring untuk pimpinan berdasarkan periode.</p>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/reports">
+        <div class="grid two">
+            <div>
+                <label>Periode</label>
+                <select name="period">
+                    <option value="harian" {% if period == 'harian' %}selected{% endif %}>Harian (24 jam)</option>
+                    <option value="mingguan" {% if period == 'mingguan' %}selected{% endif %}>Mingguan (7 hari)</option>
+                    <option value="bulanan" {% if period == 'bulanan' %}selected{% endif %}>Bulanan (30 hari)</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit">Tampilkan</button>
+    </form>
+</div>
+
+<div class="grid four">
+    <div class="card metric"><span>Total Transaksi</span><strong>{{ total }}</strong></div>
+    <div class="card metric"><span>Total Lokasi</span><strong>{{ location_total }}</strong></div>
+    <div class="card metric danger"><span>High Alert</span><strong>{{ high }}</strong></div>
+    <div class="card metric warning"><span>Need Review</span><strong>{{ medium }}</strong></div>
+</div>
+
+<div class="card">
+    <div class="section-heading">
+        <div>
+            <h3>Ringkasan Per Lokasi Periode {{ period|capitalize }}</h3>
+            <p class="muted">Laporan ini sengaja tidak menampilkan nama konsumen/siswa. Fokusnya adalah lokasi, jumlah temuan, indikator, dan tindak lanjut.</p>
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Lokasi/Cabang</th>
+                <th>Total</th>
+                <th>High Alert</th>
+                <th>Need Review</th>
+                <th>Skor</th>
+                <th>Risiko</th>
+                <th>Indikator yang Muncul</th>
+                <th>Tindak Lanjut</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in location_rows %}
+            <tr class="risk-{{ row.risk_label|lower }}">
+                <td><strong>{{ row.location }}</strong><br><span class="muted">Terakhir: {{ row.latest_date|date_id }}</span></td>
+                <td>{{ row.total }}</td>
+                <td>{{ row.high }}</td>
+                <td>{{ row.medium }}</td>
+                <td>Maks {{ row.max_score }}<br><span class="muted">Rata-rata {{ row.avg_score }}</span></td>
+                <td><span class="badge">{{ row.risk_label }}</span></td>
+                <td>{{ row.indicator_summary }}</td>
+                <td>{{ row.follow_up_summary }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8">Belum ada data pada periode ini.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

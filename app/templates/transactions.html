@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Daftar Transaksi</h2>
+        <p class="muted">Seluruh transaksi yang dipantau oleh FEWS.</p>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/transactions">
+        <div class="grid two">
+            <div>
+                <label>Filter risiko</label>
+                <input type="text" name="risk_level" value="{{ filters.risk_level }}" placeholder="Hijau / Kuning / Merah">
+            </div>
+            <div>
+                <label>Filter validasi</label>
+                <input type="text" name="validation_status" value="{{ filters.validation_status }}" placeholder="Sesuai / Tidak Sesuai / Perlu Verifikasi">
+            </div>
+            <div>
+                <label>Divisi</label>
+                <input type="text" name="division" value="{{ filters.division }}" placeholder="Finance, Procurement, dll">
+            </div>
+            <div>
+                <label>Nama pemohon</label>
+                <input type="text" name="applicant_name" value="{{ filters.applicant_name }}" placeholder="Cari nama pemohon">
+            </div>
+        </div>
+        <div class="action-row">
+            <button type="submit">Terapkan Filter</button>
+            <a class="secondary-button" href="/transactions">Reset</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Tanggal</th>
+                <th>Pemohon</th>
+                <th>Vendor</th>
+                <th>Nominal</th>
+                <th>Validasi</th>
+                <th>Risiko</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in transactions %}
+            <tr class="risk-{{ txn.risk_level|lower }}">
+                <td><a href="/transactions/{{ txn.id }}">#{{ txn.id }}</a></td>
+                <td>{{ txn.transaction_date|date_id }}</td>
+                <td>{{ txn.applicant_name }}</td>
+                <td>{{ txn.vendor_name }}</td>
+                <td>Rp {{ "{:,.0f}".format(txn.amount_input) }}</td>
+                <td>{{ txn.validation_status }}</td>
+                <td>{{ txn.risk_level }} ({{ txn.risk_score }})</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">Belum ada transaksi.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

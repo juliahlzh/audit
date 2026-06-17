@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Detail Transaksi #{{ transaction.id }}</h2>
+        <p class="muted">Validasi bukti transfer, hasil OCR, dan skor risiko FEWS.</p>
+    </div>
+    {% if user.role in ["admin", "auditor"] %}
+    <form method="post" action="/transactions/{{ transaction.id }}/run-check">
+        <button type="submit">Run FEWS Check</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="grid two">
+    <div class="card">
+        <h3>Informasi Transaksi</h3>
+        <dl class="detail-list">
+            <dt>Tanggal transaksi</dt><dd>{{ transaction.transaction_date|date_id }}</dd>
+            <dt>Nama pemohon</dt><dd>{{ transaction.applicant_name }}</dd>
+            <dt>Divisi</dt><dd>{{ transaction.division }}</dd>
+            <dt>Jenis pengeluaran</dt><dd>{{ transaction.expense_type }}</dd>
+            <dt>Nominal input</dt><dd>Rp {{ "{:,.0f}".format(transaction.amount_input) }}</dd>
+            <dt>Vendor / penerima</dt><dd>{{ transaction.vendor_name }}</dd>
+            <dt>No rekening tujuan</dt><dd>{{ transaction.destination_account }}</dd>
+            <dt>No rekening pengirim</dt><dd>{{ transaction.source_account }}</dd>
+            <dt>Bukti transfer</dt><dd><a href="{{ proof_url }}">Lihat file</a></dd>
+        </dl>
+    </div>
+    <div class="card">
+        <h3>Hasil Validasi Otomatis</h3>
+        <div class="badge {{ transaction.validation_status|lower|replace(' ', '-') }}">{{ transaction.validation_status }}</div>
+        <p>{{ transaction.validation_notes }}</p>
+        <h4>Hasil OCR</h4>
+        <dl class="detail-list">
+            <dt>Nominal transfer</dt><dd>{{ transaction.ocr_amount if transaction.ocr_amount else "-" }}</dd>
+            <dt>No rekening</dt><dd>{{ transaction.ocr_account or "-" }}</dd>
+            <dt>Tanggal transaksi</dt><dd>{{ transaction.ocr_transaction_date or "-" }}</dd>
+            <dt>Nama bank</dt><dd>{{ transaction.ocr_bank_name or "-" }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="grid two">
+    <div class="card">
+        <h3>Risk Scoring</h3>
+        <div class="metric risk-banner risk-{{ transaction.risk_level|lower }}">
+            <span>Skor Risiko</span>
+            <strong>{{ transaction.risk_score }} | {{ transaction.risk_level }}</strong>
+        </div>
+        <p><strong>Ringkasan:</strong> {{ transaction.risk_summary }}</p>
+        <p><strong>Rekomendasi:</strong> {{ transaction.recommendation }}</p>
+        <p><strong>Status tindak lanjut:</strong> {{ transaction.follow_up_status }}</p>
+        {% if user.role in ["admin", "auditor"] %}
+        <form method="post" action="/transactions/{{ transaction.id }}/follow-up">
+            <label>Update tindak lanjut</label>
+            <input type="text" name="follow_up_status" value="{{ transaction.follow_up_status }}" placeholder="Misal: Open / Investigasi / Closed">
+            <label>Catatan tindak lanjut</label>
+            <input type="text" name="follow_up_notes" placeholder="Catatan auditor / admin keuangan">
+            <button type="submit">Simpan Status</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h3>Indikator Risiko</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Indikator</th>
+                    <th>Skor</th>
+                    <th>Severity</th>
+                    <th>Catatan</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in transaction.indicators %}
+                <tr>
+                    <td>{{ item.indicator_name }}</td>
+                    <td>{{ item.score }}</td>
+                    <td>{{ item.severity }}</td>
+                    <td>{{ item.notes }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Belum ada hasil indikator.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>OCR Raw Text</h3>
+    <pre class="raw-text">{{ transaction.ocr_raw_text or "Tidak ada hasil OCR." }}</pre>
+</div>
+
+<div class="card">
+    <h3>Audit Trail Terkait</h3>
+    <ul class="log-list">
+        {% for log in transaction.logs %}
+        <li>
+            <strong>{{ log.action }}</strong>
+            <span>{{ log.status }}</span>
+            <p>{{ log.notes }}</p>
+        </li>
+        {% else %}
+        <li>Belum ada log.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

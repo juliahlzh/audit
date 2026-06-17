@@ -1,0 +1,4 @@
+transaction_date,applicant_name,division,expense_type,amount_input,vendor_name,destination_account,source_account,proof_file_name,validation_status,risk_score,risk_level
+2026-04-10,Rina Putri,Finance,Pembayaran Vendor,12500000,PT Sumber Data,1234567890,9988776655,sample1.txt,Sesuai,7,Kuning
+2026-04-12,Rina Putri,Finance,Reimburse,48000000,PT Cahaya Konsultan,567812349999,9988776655,sample2.txt,Tidak Sesuai,11,Merah
+2026-04-13,Bagus Santoso,Procurement,Pembelian Operasional,9400000,CV Makmur Abadi,777788889999,5544332211,sample3.txt,Perlu Verifikasi,6,Kuning

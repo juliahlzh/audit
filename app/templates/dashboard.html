@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Dashboard FEWS Approval</h2>
+        <p class="muted">Satu file Excel approval langsung dianalisis untuk mendeteksi indikasi kecurangan.</p>
+    </div>
+    <div class="user-badge">{{ user.full_name }} | {{ user.role }}</div>
+</div>
+
+<div class="card quick-guide">
+    <h3>Cara Pakai Singkat</h3>
+    <div class="guide-steps">
+        <span>1. Upload file Excel approval di menu <strong>Upload Excel</strong>.</span>
+        <span>2. FEWS otomatis menjalankan seluruh tes indikasi fraud.</span>
+        <span>3. Cek hasil detail di <strong>Alert Center</strong>.</span>
+    </div>
+</div>
+
+<div class="grid three">
+    <div class="card metric">
+        <span>Total data approval</span>
+        <strong>{{ total_branch }}</strong>
+    </div>
+    <div class="card metric warning">
+        <span>Perlu review</span>
+        <strong>{{ total_need_review }}</strong>
+    </div>
+    <div class="card metric danger">
+        <span>High alert</span>
+        <strong>{{ total_high_alert }}</strong>
+    </div>
+</div>
+
+{% if total_high_alert > 0 %}
+<div class="alert red">Terdapat {{ total_high_alert }} transaksi dengan skor risiko di atas 7 (prioritas investigasi).</div>
+{% endif %}
+
+{% if database_warning %}
+<div class="alert red">{{ database_warning }}</div>
+{% endif %}
+
+<div class="grid two">
+    <div class="card">
+        <h3>Indikator Yang Dites</h3>
+        <div class="explain-list">
+            {% for code, rule in rule_config.rules.items() %}
+            <div class="explain-item"><strong>{{ loop.index }}. {{ rule.name }}</strong><p>{{ rule.description }}</p></div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card">
+        <h3>Aturan Skor Risiko</h3>
+        <div class="score-box">
+            <p><strong>Skor per indikator:</strong></p>
+            {% for code, score in rule_config.score.items() %}
+            <p>{{ rule_config.rules[code].name }}: +{{ score }}</p>
+            {% endfor %}
+            <hr>
+            <p><strong>Kategori hasil:</strong></p>
+            <p>0-{{ rule_config.risk_level.low_max }}: Normal (MATCHED)</p>
+            <p>{{ rule_config.risk_level.low_max + 1 }}-{{ rule_config.risk_level.medium_max }}: Perlu Review (NEED REVIEW)</p>
+            <p>>{{ rule_config.risk_level.medium_max }}: High Alert (UNMATCHED)</p>
+        </div>
+    </div>
+</div>
+
+<div class="grid two dashboard-visuals">
+    <div class="card dashboard-visual-card trend-card">
+        <div class="visual-heading">
+            <div>
+                <h3>Tren Approval Terbaru</h3>
+                <p class="muted">Ringkasan 10 tanggal terakhir agar cepat dibaca.</p>
+            </div>
+            <span class="visual-pill">Harian</span>
+        </div>
+        <div class="trend-strip">
+            {% for label in trend_labels %}
+            {% set b_value = trend_branch[loop.index0] %}
+            <div class="trend-pill">
+                <span>{{ label|date_id }}</span>
+                <strong>{{ b_value }}</strong>
+                <small>data</small>
+            </div>
+            {% else %}
+            <p>Belum ada data tren harian.</p>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card dashboard-visual-card indicator-card">
+        <div class="visual-heading">
+            <div>
+                <h3>Indikator Paling Sering</h3>
+                <p class="muted">Ditampilkan sebagai nama tes, bukan kalimat alasan panjang.</p>
+            </div>
+            <span class="visual-pill amber">Top 8</span>
+        </div>
+        <div class="indicator-grid">
+            {% set max_indicator = (mismatch_values|max) if mismatch_values else 1 %}
+            {% for item in indicator_rows %}
+            <div class="indicator-chip" title="{{ item.label }}">
+                <div class="indicator-chip-top">
+                    <strong>{{ item.label }}</strong>
+                    <span>{{ item.value }}</span>
+                </div>
+                <div class="chip-bar">
+                    <span style="width: {{ ((item.value / max_indicator) * 100) if max_indicator else 0 }}%;"></span>
+                </div>
+            </div>
+            {% else %}
+            <p>Belum ada indikator fraud terdeteksi.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="grid two">
+    <div class="card">
+        <h3>Transaksi Prioritas Investigasi</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Skor</th>
+                    <th>Indikator</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in suspicious_results %}
+                <tr class="risk-{{ row.status|lower|replace(' ', '-') }}">
+                    <td>#{{ row.id }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>{{ row.risk_score }} ({{ row.risk_level }})</td>
+                    <td>{{ row.mismatch_type }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Belum ada high alert.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card">
+        <h3>Aktivitas Sistem</h3>
+        <ul class="log-list">
+            {% for log in latest_alerts %}
+            <li>
+                <strong>{{ log.status }}</strong>
+                <span>{{ log.action }}</span>
+                <p>{{ log.notes }}</p>
+            </li>
+            {% else %}
+            <li>Belum ada alert.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

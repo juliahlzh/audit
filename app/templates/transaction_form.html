@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Input Data Transaksi</h2>
+        <p class="muted">Upload data transaksi dan bukti transfer untuk dianalisis FEWS.</p>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Preflight Check</h3>
+    <div class="status-list">
+        {% for item in system_status %}
+        <div class="status-item {{ 'status-ok' if item.ok else 'status-warn' }}">
+            <strong>{{ item.name }}</strong>
+            <span>{{ item.message }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card form-card">
+    <form method="post" enctype="multipart/form-data">
+        <div class="grid two">
+            <div>
+                <label>Tanggal transaksi</label>
+                <input type="date" name="transaction_date" required>
+            </div>
+            <div>
+                <label>Nama pemohon</label>
+                <input type="text" name="applicant_name" required>
+            </div>
+            <div>
+                <label>Divisi</label>
+                <input type="text" name="division" required>
+            </div>
+            <div>
+                <label>Jenis pengeluaran</label>
+                <input type="text" name="expense_type" required>
+            </div>
+            <div>
+                <label>Nominal input</label>
+                <input type="number" name="amount_input" min="0" step="0.01" required>
+            </div>
+            <div>
+                <label>Vendor / penerima</label>
+                <input type="text" name="vendor_name" required>
+            </div>
+            <div>
+                <label>Nomor rekening tujuan</label>
+                <input type="text" name="destination_account" required>
+            </div>
+            <div>
+                <label>Nomor rekening pengirim</label>
+                <input type="text" name="source_account" required>
+            </div>
+            <div class="full-width">
+                <label>Upload bukti transfer (gambar/PDF)</label>
+                <input type="file" name="proof_file" accept=".png,.jpg,.jpeg,.pdf,.bmp,.tiff" required>
+            </div>
+        </div>
+        <button type="submit">Simpan dan Jalankan FEWS</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Alert Center FEWS</h2>
+        <p class="muted">Filter dan tindak lanjuti transaksi berisiko.</p>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/alerts">
+        <div class="grid two">
+            <div>
+                <label>Status Risiko</label>
+                <select name="status">
+                    <option value="" {% if not filters.status %}selected{% endif %}>Semua</option>
+                    <option value="MATCHED" {% if filters.status == 'MATCHED' %}selected{% endif %}>MATCHED</option>
+                    <option value="NEED REVIEW" {% if filters.status == 'NEED REVIEW' %}selected{% endif %}>NEED REVIEW</option>
+                    <option value="UNMATCHED" {% if filters.status == 'UNMATCHED' %}selected{% endif %}>UNMATCHED</option>
+                </select>
+            </div>
+            <div>
+                <label>Status Tindak Lanjut</label>
+                <select name="follow_up_status">
+                    <option value="" {% if not filters.follow_up_status %}selected{% endif %}>Semua</option>
+                    <option value="OPEN" {% if filters.follow_up_status == 'OPEN' %}selected{% endif %}>OPEN</option>
+                    <option value="CLARIFICATION" {% if filters.follow_up_status == 'CLARIFICATION' %}selected{% endif %}>CLARIFICATION</option>
+                    <option value="HOLD" {% if filters.follow_up_status == 'HOLD' %}selected{% endif %}>HOLD</option>
+                    <option value="RETURN" {% if filters.follow_up_status == 'RETURN' %}selected{% endif %}>RETURN</option>
+                    <option value="INVESTIGATION" {% if filters.follow_up_status == 'INVESTIGATION' %}selected{% endif %}>INVESTIGATION</option>
+                    <option value="RESOLVED" {% if filters.follow_up_status == 'RESOLVED' %}selected{% endif %}>RESOLVED</option>
+                </select>
+            </div>
+            <div>
+                <label>Minimal Skor</label>
+                <input type="number" name="min_score" value="{{ filters.min_score }}" min="0">
+            </div>
+            <div>
+                <label>Nama Cabang</label>
+                <input type="text" name="branch" value="{{ filters.branch }}" placeholder="Contoh: Cabang A">
+            </div>
+            <div>
+                <label>Nopeg Petugas</label>
+                <input type="text" name="officer" value="{{ filters.officer }}" placeholder="Contoh: 623022">
+            </div>
+            <div>
+                <label>Indikator</label>
+                <input type="text" name="indicator" value="{{ filters.indicator }}" placeholder="Contoh: bank / approval / setoran">
+            </div>
+            <div>
+                <label>Dari Tanggal Transaksi</label>
+                <input type="date" name="date_from" value="{{ filters.date_from }}">
+            </div>
+            <div>
+                <label>Sampai Tanggal Transaksi</label>
+                <input type="date" name="date_to" value="{{ filters.date_to }}">
+            </div>
+        </div>
+        <div class="action-row">
+            <button type="submit">Terapkan Filter</button>
+            <a class="secondary-button" href="/alerts">Reset</a>
+        </div>
+    </form>
+</div>
+
+<div class="alert-toolbar card">
+    <div>
+        <strong>{{ pagination.total_rows }} alert ditemukan</strong>
+        <span class="muted">Ditampilkan {{ pagination.per_page }} data per halaman agar Alert Center tetap cepat.</span>
+    </div>
+    <div class="pager">
+        {% set prev_page = pagination.page - 1 %}
+        {% set next_page = pagination.page + 1 %}
+        {% set query_base = 'status=' ~ (filters.status|urlencode) ~ '&follow_up_status=' ~ (filters.follow_up_status|urlencode) ~ '&min_score=' ~ filters.min_score ~ '&branch=' ~ (filters.branch|urlencode) ~ '&officer=' ~ (filters.officer|urlencode) ~ '&indicator=' ~ (filters.indicator|urlencode) ~ '&date_from=' ~ (filters.date_from|urlencode) ~ '&date_to=' ~ (filters.date_to|urlencode) ~ '&per_page=' ~ filters.per_page %}
+        {% if pagination.has_prev %}
+        <a href="/alerts?{{ query_base }}&page={{ prev_page }}">Sebelumnya</a>
+        {% else %}
+        <span class="disabled">Sebelumnya</span>
+        {% endif %}
+        <strong>{{ pagination.page }} / {{ pagination.total_pages }}</strong>
+        {% if pagination.has_next %}
+        <a href="/alerts?{{ query_base }}&page={{ next_page }}">Berikutnya</a>
+        {% else %}
+        <span class="disabled">Berikutnya</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="alert-list">
+    {% for row in rows %}
+    <article class="alert-card risk-{{ row.status|lower|replace(' ', '-') }}">
+        <div class="alert-card-status">
+            <span class="badge status-{{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</span>
+            <span class="risk-level">{{ row.risk_level }}</span>
+            <span class="alert-id">#{{ row.id }}</span>
+        </div>
+
+        <div class="alert-card-main">
+            <section class="approval-summary">
+                <span class="section-label">Data Approval</span>
+                {% if row.branch_input %}
+                <strong>{{ row.branch_input.customer_name }}</strong>
+                <span>{{ row.branch_input.transaction_date|date_id }} | {{ row.branch_input.branch_name }}</span>
+                <span>Rp {{ "{:,.0f}".format(row.branch_input.amount_input_branch) }} | {{ row.branch_input.invoice_code }}</span>
+                {% if row.branch_input.officer_id %}
+                <span>Petugas: {{ row.branch_input.officer_id }}</span>
+                {% endif %}
+                {% else %}
+                <span>-</span>
+                {% endif %}
+            </section>
+
+            <section class="flag-explanation">
+                <div class="flag-header">
+                    <span class="section-label">Kenapa Diflag</span>
+                    <strong>Skor {{ row.risk_score }}</strong>
+                </div>
+
+                {% if row.rule_details %}
+                <div class="flag-chip-row">
+                    {% for rule in row.rule_details %}
+                    <span class="flag-chip" title="{{ rule.reason }}">{{ rule.name }} <strong>+{{ rule.score }}</strong></span>
+                    {% endfor %}
+                </div>
+                <ol class="rule-list compact">
+                    {% for rule in row.rule_details %}
+                    <li>
+                        <div class="rule-title">
+                            <strong>{{ rule.name }}</strong>
+                            <span>+{{ rule.score }}</span>
+                        </div>
+                        <small class="rule-category">{{ rule.category }} | Risiko {{ rule.risk_impact or rule.level }}</small>
+                        <p>{{ rule.reason }}</p>
+                        <div class="rule-meta">
+                            <span>Ditemukan: {{ rule.observed }}</span>
+                            <span>Aturan: {{ rule.threshold }}</span>
+                            {% if rule.source_field %}<span>Sumber: {{ rule.source_field }}</span>{% endif %}
+                        </div>
+                        <details class="rule-more">
+                            <summary>Detail aturan</summary>
+                            <p class="rule-definition">{{ rule.definition }}</p>
+                            {% if rule.recommendation %}
+                            <p class="rule-recommendation"><strong>Rekomendasi:</strong> {{ rule.recommendation }}</p>
+                            {% endif %}
+                        </details>
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% else %}
+                <p class="muted">{{ row.match_reason or row.mismatch_type or 'Lolos seluruh pengujian FEWS.' }}</p>
+                {% endif %}
+            </section>
+
+            <section class="follow-up-box">
+                <span class="section-label">Tindak Lanjut</span>
+                <strong>{{ row.follow_up_status or 'OPEN' }}</strong>
+                <form method="post" action="/alerts/{{ row.id }}/follow-up">
+                    <select name="follow_up_status" required>
+                        <option value="CLARIFICATION">CLARIFICATION</option>
+                        <option value="HOLD">HOLD</option>
+                        <option value="RETURN">RETURN</option>
+                        <option value="INVESTIGATION">INVESTIGATION</option>
+                        <option value="RESOLVED">RESOLVED</option>
+                    </select>
+                    <input type="text" name="follow_up_notes" placeholder="Catatan klarifikasi / alasan hold-return" required>
+                    <button type="submit">Simpan</button>
+                </form>
+            </section>
+        </div>
+    </article>
+    {% else %}
+    <div class="card empty-state">Belum ada hasil deteksi.</div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Data Mutasi Bank (Dana Masuk)</h2>
+        <p class="muted">Masukkan mutasi dana masuk perusahaan untuk dicocokkan otomatis.</p>
+    </div>
+</div>
+
+{% if msg %}
+<div class="alert {{ 'red' if failed > 0 else 'ok' }}">
+    {{ msg }}. Berhasil: {{ imported }} baris{% if failed > 0 %}, gagal: {{ failed }} baris{% endif %}.
+</div>
+{% endif %}
+
+{% if user.role in ["admin", "auditor"] %}
+<div class="card form-card">
+    <h3>Upload Excel Mutasi Bank</h3>
+    <p class="muted">
+        Bisa upload `.xlsx/.xls/.csv`. Header fleksibel, contoh: Tanggal Dana Masuk, Nama Pengirim, Nominal Masuk.
+    </p>
+    <form method="post" action="/bank-mutations/upload" enctype="multipart/form-data">
+        <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+        <button type="submit">Upload Mutasi & Jalankan Matching</button>
+    </form>
+</div>
+
+<div class="card form-card">
+    <form method="post" action="/bank-mutations/new">
+        <div class="grid two">
+            <div>
+                <label>Tanggal dana masuk</label>
+                <input type="date" name="incoming_date" required>
+            </div>
+            <div>
+                <label>Nama pengirim</label>
+                <input type="text" name="sender_name" required>
+            </div>
+            <div>
+                <label>Nominal masuk</label>
+                <input type="number" name="amount_in" min="0" step="0.01" required>
+            </div>
+            <div>
+                <label>Rekening perusahaan</label>
+                <input type="text" name="company_account" required>
+            </div>
+            <div>
+                <label>Deskripsi mutasi</label>
+                <input type="text" name="mutation_description">
+            </div>
+            <div>
+                <label>Keterangan</label>
+                <input type="text" name="notes">
+            </div>
+        </div>
+        <button type="submit">Simpan Mutasi (Auto Match)</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Tanggal Masuk</th>
+                <th>Pengirim</th>
+                <th>Nominal</th>
+                <th>Rekening</th>
+                <th>Deskripsi</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>#{{ row.id }}</td>
+                <td>{{ row.incoming_date|date_id }}</td>
+                <td>{{ row.sender_name }}</td>
+                <td>Rp {{ "{:,.0f}".format(row.amount_in) }}</td>
+                <td>{{ row.company_account }}</td>
+                <td>{{ row.mutation_description or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6">Belum ada data mutasi bank.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

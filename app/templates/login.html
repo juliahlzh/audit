@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login FEWS</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-page">
+    <div class="login-card">
+        <h1>FEWS Login</h1>
+        <p>Sistem lokal fraud monitoring untuk divisi keuangan.</p>
+        {% if error %}
+        <div class="alert red">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="/login">
+            <label>Username</label>
+            <input type="text" name="username" required>
+            <label>Password</label>
+            <input type="password" name="password" required>
+            <button type="submit">Masuk</button>
+        </form>
+        <div class="hint">
+            <div>admin / admin123</div>
+            <div>auditor / auditor123</div>
+            <div>viewer / viewer123</div>
+        </div>
+    </div>
+</body>
+</html>
