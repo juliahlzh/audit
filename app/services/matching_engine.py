@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
@@ -32,11 +31,10 @@ def _risk_level(score: int) -> str:
 
 
 def _status_from_score(score: int) -> str:
-    low_max = RULE_CONFIG["risk_level"]["low_max"]
     medium_max = RULE_CONFIG["risk_level"]["medium_max"]
     if score > medium_max:
         return "UNMATCHED"
-    if score > low_max:
+    if score > 0:
         return "NEED REVIEW"
     return "MATCHED"
 
@@ -95,10 +93,11 @@ def _business_day_gap(start: date | datetime, end: date | datetime) -> int:
     if end_date <= start_date:
         return 0
 
+    holidays = set(RULE_CONFIG.get("holidays", {}))
     days = 0
     cursor = start_date + timedelta(days=1)
     while cursor <= end_date:
-        if cursor.weekday() < 5:
+        if cursor.weekday() < 5 and cursor.isoformat() not in holidays:
             days += 1
         cursor += timedelta(days=1)
     return days
@@ -138,7 +137,10 @@ def _late_input_rule(method: str, late_days: int) -> tuple[str, int, str]:
     method_key = _payment_method_key(method)
     config_key = "tunai" if method_key == "tunai" else "transfer"
     conf = RULE_CONFIG["late_input_score"][config_key]
-    if late_days >= conf["high_after_days"]:
+    if late_days >= conf.get("critical_after_days", 11):
+        score = conf.get("critical_score", 8)
+        severity = "warning merah"
+    elif late_days >= conf["high_after_days"]:
         score = conf["high_score"]
         severity = "berat"
     elif late_days >= conf["medium_after_days"]:
@@ -174,20 +176,6 @@ def run_matching(db: Session) -> list[MatchingResult]:
     attention_end = attention_window.get("end_minute", attention_window["end_hour"] * 60)
     attention_label = attention_window.get("label", f"{attention_window['start_hour']:02d}:00-{attention_window['end_hour']:02d}:00")
     late_input_max_days = RULE_CONFIG["late_input_max_days"]
-    split_window_hours = RULE_CONFIG["split_window_hours"]
-    split_threshold = RULE_CONFIG["split_threshold"]
-
-    avg_by_branch: dict[str, float] = {}
-    grouped_amount: dict[str, list[float]] = defaultdict(list)
-    for item in branch_inputs:
-        grouped_amount[item.branch_name or "-"].append(item.amount_input_branch or 0.0)
-    for key, values in grouped_amount.items():
-        avg_by_branch[key] = (sum(values) / len(values)) if values else 0.0
-
-    by_officer_time: dict[str, list[BranchInput]] = defaultdict(list)
-    for item in branch_inputs:
-        by_officer_time[item.officer_id or "-"].append(item)
-
     results: list[MatchingResult] = []
     for item in branch_inputs:
         triggered: list[dict[str, str | int | bool]] = []
@@ -221,7 +209,7 @@ def run_matching(db: Session) -> list[MatchingResult]:
                 )
             )
 
-        reference_date = item.deposit_date or item.bank_date or (item.payment_received_at.date() if item.payment_received_at else item.transaction_date)
+        reference_date = item.deposit_date
         if item.source_created_at and reference_date:
             late_days = _business_day_gap(reference_date, item.source_created_at)
             if late_days > late_input_max_days:
@@ -233,17 +221,15 @@ def run_matching(db: Session) -> list[MatchingResult]:
                         rule_code,
                         f"Tanggal setor/pembayaran {_date_label(reference_date)}, tanggal input {input_at_label}, terlambat {late_days} hari kerja",
                         f"Maksimal H+{late_input_max_days} hari kerja; klasifikasi {severity}",
-                    f"Input data setor metode {item.payment_method} terlambat {late_days} hari kerja dari tanggal transaksi {_date_label(item.transaction_date)} / tanggal setor {_date_label(reference_date)} ke tanggal input {input_at_label}, melewati batas H+{late_input_max_days} hari kerja.",
+                    f"Input data setor metode {item.payment_method} terlambat {late_days} hari kerja dari tanggal setor {_date_label(reference_date)} ke tanggal input {input_at_label}, melewati batas H+{late_input_max_days} hari kerja.",
                         score=rule_score,
-                        source_field="deposit_date/bank_date/payment_received_at/source_created_at/payment_method",
+                        source_field="deposit_date/source_created_at/payment_method",
                     )
                 )
 
         date_parts = {
-            "transaksi": item.transaction_date,
             "input": item.source_created_at.date() if item.source_created_at else None,
             "setoran": item.deposit_date,
-            "bank": item.bank_date,
         }
         present_dates = {key: value for key, value in date_parts.items() if value}
         if len(set(present_dates.values())) > 1:
@@ -254,9 +240,9 @@ def run_matching(db: Session) -> list[MatchingResult]:
                 _trigger(
                     "date_mismatch",
                     observed,
-                    "Tanggal transaksi, input, setoran, dan bank harus konsisten",
-                    f"Tanggal tidak konsisten pada data setoran termasuk tanggal bank/input/setoran: {observed}.",
-                    source_field="transaction_date/source_created_at/deposit_date/bank_date",
+                    "Tanggal input dan tanggal setor harus konsisten",
+                    f"Tanggal input dan tanggal setor tidak konsisten: {observed}.",
+                    source_field="source_created_at/deposit_date",
                 )
             )
 
@@ -272,43 +258,6 @@ def run_matching(db: Session) -> list[MatchingResult]:
                     source_field="amount_should_pay/amount_input_branch",
                 )
             )
-
-        branch_avg = avg_by_branch.get(item.branch_name or "-", 0.0)
-        if branch_avg > 0 and (item.amount_input_branch or 0.0) >= (branch_avg * 2.0) and len(grouped_amount[item.branch_name or "-"]) >= 3:
-            rule_score = RULE_CONFIG["score"]["split_txn"]
-            score += rule_score
-            triggered.append(
-                _trigger(
-                    "split_txn",
-                    f"{item.amount_input_branch:,.0f} vs rata-rata lokasi {branch_avg:,.0f}",
-                    "Kurang dari 2x rata-rata lokasi atau ada alasan sah",
-                    f"Nominal Rp {item.amount_input_branch:,.0f} jauh di atas pola normal lokasi Rp {branch_avg:,.0f}.",
-                    source_field="amount_input_branch/branch_name",
-                )
-            )
-
-        if item.officer_id:
-            if item.source_created_at:
-                near_count = 0
-                win_start = item.source_created_at - timedelta(hours=split_window_hours)
-                win_end = item.source_created_at + timedelta(hours=split_window_hours)
-                for other in by_officer_time[item.officer_id]:
-                    if other.id == item.id or not other.source_created_at:
-                        continue
-                    if win_start <= other.source_created_at <= win_end and (other.amount_input_branch or 0.0) <= split_threshold:
-                        near_count += 1
-                if near_count >= 2:
-                    rule_score = RULE_CONFIG["score"]["split_txn"]
-                    score += rule_score
-                    triggered.append(
-                        _trigger(
-                            "split_txn",
-                            f"{near_count + 1} transaksi berdekatan",
-                            f"< 3 transaksi dalam {split_window_hours} jam",
-                            f"Ada {near_count + 1} transaksi kecil berdekatan dalam {split_window_hours} jam oleh petugas {item.officer_id}.",
-                            source_field="officer_id/source_created_at/amount_input_branch",
-                        )
-                    )
 
         status = _status_from_score(score)
         mismatch = [str(r["reason"]) for r in triggered]
@@ -326,7 +275,7 @@ def run_matching(db: Session) -> list[MatchingResult]:
             confidence=max(0.0, 100.0 - (score * 8.0)),
             match_reason="; ".join(mismatch) if mismatch else "Lolos seluruh pengujian FEWS.",
             triggered_rules=json.dumps(triggered, ensure_ascii=False),
-            follow_up_status="OPEN" if score > RULE_CONFIG["risk_level"]["low_max"] else "RESOLVED",
+            follow_up_status="OPEN" if score > 0 else "RESOLVED",
             follow_up_notes=None,
         )
         db.add(result)

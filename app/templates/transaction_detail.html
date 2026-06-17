@@ -13,7 +13,7 @@
 </div>
 
 <div class="grid two">
-    <div class="card">
+    <div class="panel">
         <h3>Informasi Transaksi</h3>
         <dl class="detail-list">
             <dt>Tanggal transaksi</dt><dd>{{ transaction.transaction_date|date_id }}</dd>
@@ -27,7 +27,7 @@
             <dt>Bukti transfer</dt><dd><a href="{{ proof_url }}">Lihat file</a></dd>
         </dl>
     </div>
-    <div class="card">
+    <div class="panel">
         <h3>Hasil Validasi Otomatis</h3>
         <div class="badge {{ transaction.validation_status|lower|replace(' ', '-') }}">{{ transaction.validation_status }}</div>
         <p>{{ transaction.validation_notes }}</p>
@@ -42,7 +42,7 @@
 </div>
 
 <div class="grid two">
-    <div class="card">
+    <div class="panel">
         <h3>Risk Scoring</h3>
         <div class="metric risk-banner risk-{{ transaction.risk_level|lower }}">
             <span>Skor Risiko</span>
@@ -61,9 +61,9 @@
         </form>
         {% endif %}
     </div>
-    <div class="card">
+    <div class="panel">
         <h3>Indikator Risiko</h3>
-        <table>
+        <div class="table-wrap"><table>
             <thead>
                 <tr>
                     <th>Indikator</th>
@@ -84,16 +84,16 @@
                 <tr><td colspan="4">Belum ada hasil indikator.</td></tr>
                 {% endfor %}
             </tbody>
-        </table>
+        </table></div>
     </div>
 </div>
 
-<div class="card">
+<div class="panel">
     <h3>OCR Raw Text</h3>
     <pre class="raw-text">{{ transaction.ocr_raw_text or "Tidak ada hasil OCR." }}</pre>
 </div>
 
-<div class="card">
+<div class="panel">
     <h3>Audit Trail Terkait</h3>
     <ul class="log-list">
         {% for log in transaction.logs %}

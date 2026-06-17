@@ -5,30 +5,36 @@
         <h2>Dashboard FEWS Approval</h2>
         <p class="muted">Satu file Excel approval langsung dianalisis untuk mendeteksi indikasi kecurangan.</p>
     </div>
-    <div class="user-badge">{{ user.full_name }} | {{ user.role }}</div>
+    <div class="page-actions">
+        <a class="secondary-button" href="/branch-inputs">Upload Data</a>
+        <a class="primary-link-button" href="/alerts">Buka Alert</a>
+    </div>
 </div>
 
-<div class="card quick-guide">
+<div class="workflow-strip">
     <h3>Cara Pakai Singkat</h3>
     <div class="guide-steps">
-        <span>1. Upload file Excel approval di menu <strong>Upload Excel</strong>.</span>
-        <span>2. FEWS otomatis menjalankan seluruh tes indikasi fraud.</span>
-        <span>3. Cek hasil detail di <strong>Alert Center</strong>.</span>
+        <span><strong>1</strong> Upload file Excel approval.</span>
+        <span><strong>2</strong> Sistem menjalankan tes indikator.</span>
+        <span><strong>3</strong> Auditor tindak lanjuti alert.</span>
     </div>
 </div>
 
 <div class="grid three">
-    <div class="card metric">
+    <div class="metric-card">
         <span>Total data approval</span>
         <strong>{{ total_branch }}</strong>
+        <small>Data aktif yang dipantau</small>
     </div>
-    <div class="card metric warning">
+    <div class="metric-card warning">
         <span>Perlu review</span>
         <strong>{{ total_need_review }}</strong>
+        <small>Skor di atas 0</small>
     </div>
-    <div class="card metric danger">
+    <div class="metric-card danger">
         <span>High alert</span>
         <strong>{{ total_high_alert }}</strong>
+        <small>Prioritas investigasi</small>
     </div>
 </div>
 
@@ -41,15 +47,18 @@
 {% endif %}
 
 <div class="grid two">
-    <div class="card">
+    <div class="panel">
         <h3>Indikator Yang Dites</h3>
         <div class="explain-list">
             {% for code, rule in rule_config.rules.items() %}
-            <div class="explain-item"><strong>{{ loop.index }}. {{ rule.name }}</strong><p>{{ rule.description }}</p></div>
+            <div class="explain-item">
+                <span>{{ loop.index }}</span>
+                <div><strong>{{ rule.name }}</strong><p>{{ rule.description }}</p></div>
+            </div>
             {% endfor %}
         </div>
     </div>
-    <div class="card">
+    <div class="panel">
         <h3>Aturan Skor Risiko</h3>
         <div class="score-box">
             <p><strong>Skor per indikator:</strong></p>
@@ -58,15 +67,15 @@
             {% endfor %}
             <hr>
             <p><strong>Kategori hasil:</strong></p>
-            <p>0-{{ rule_config.risk_level.low_max }}: Normal (MATCHED)</p>
-            <p>{{ rule_config.risk_level.low_max + 1 }}-{{ rule_config.risk_level.medium_max }}: Perlu Review (NEED REVIEW)</p>
+            <p>0: Normal (MATCHED)</p>
+            <p>1-{{ rule_config.risk_level.medium_max }}: Perlu Review (NEED REVIEW)</p>
             <p>>{{ rule_config.risk_level.medium_max }}: High Alert (UNMATCHED)</p>
         </div>
     </div>
 </div>
 
 <div class="grid two dashboard-visuals">
-    <div class="card dashboard-visual-card trend-card">
+    <div class="panel dashboard-visual-card trend-card">
         <div class="visual-heading">
             <div>
                 <h3>Tren Approval Terbaru</h3>
@@ -87,13 +96,13 @@
             {% endfor %}
         </div>
     </div>
-    <div class="card dashboard-visual-card indicator-card">
+    <div class="panel dashboard-visual-card indicator-card">
         <div class="visual-heading">
             <div>
                 <h3>Indikator Paling Sering</h3>
                 <p class="muted">Ditampilkan sebagai nama tes, bukan kalimat alasan panjang.</p>
             </div>
-            <span class="visual-pill amber">Top 8</span>
+            <span class="visual-pill accent">Top 8</span>
         </div>
         <div class="indicator-grid">
             {% set max_indicator = (mismatch_values|max) if mismatch_values else 1 %}
@@ -115,9 +124,9 @@
 </div>
 
 <div class="grid two">
-    <div class="card">
+    <div class="panel">
         <h3>Transaksi Prioritas Investigasi</h3>
-        <table>
+        <div class="table-wrap"><table>
             <thead>
                 <tr>
                     <th>ID</th>
@@ -138,9 +147,9 @@
                 <tr><td colspan="4">Belum ada high alert.</td></tr>
                 {% endfor %}
             </tbody>
-        </table>
+        </table></div>
     </div>
-    <div class="card">
+    <div class="panel">
         <h3>Aktivitas Sistem</h3>
         <ul class="log-list">
             {% for log in latest_alerts %}

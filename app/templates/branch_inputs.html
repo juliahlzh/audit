@@ -14,21 +14,30 @@
 {% endif %}
 
 {% if user.role in ["admin", "auditor"] %}
-<div class="card form-card">
-    <h3>Upload Excel</h3>
-    <p class="muted">
-        Header fleksibel. Unduh template standar agar import lebih aman.
-    </p>
-    <div class="action-row">
-        <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template Excel</a>
+<div class="upload-shell">
+    <div class="upload-copy">
+        <h3>Upload Excel Approval</h3>
+        <p>Gunakan file `.xlsx`, `.xls`, atau `.csv`. Format setoran bank asli dengan baris header `kodelokasi`, `idunix`, `tgl_bukubesar`, dan `created_at` didukung.</p>
+        <div class="upload-checks">
+            <span>✓ 10+ alias header didukung</span>
+            <span>✓ Deteksi otomatis setelah upload</span>
+            <span>✓ Data lama diarsipkan, bukan dihapus</span>
+        </div>
     </div>
-    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data">
-        <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
-        <button type="submit">Upload Excel & Jalankan Deteksi</button>
-    </form>
+    <div class="upload-panel">
+        <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template Excel</a>
+        <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="upload-form">
+            <label class="file-drop">
+                <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+                <strong>Pilih file approval</strong>
+                <span class="file-hint">Drag atau klik untuk memilih workbook</span>
+            </label>
+            <button type="submit">Upload Excel & Jalankan Deteksi</button>
+        </form>
+    </div>
 </div>
 
-<div class="card">
+<div class="panel">
     <details>
         <summary><strong>Input Manual (Opsional)</strong></summary>
         <div class="details-body">
@@ -63,7 +72,7 @@
 </div>
 {% endif %}
 
-<div class="card">
+<div class="panel">
     <div class="section-heading">
         <div>
             <h3>Data Approval Terbaru</h3>
@@ -76,7 +85,7 @@
         </form>
         {% endif %}
     </div>
-    <table>
+    <div class="table-wrap"><table>
         <thead><tr><th>ID</th><th>Tanggal</th><th>Cabang</th><th>Customer</th><th>Invoice</th><th>Nominal Input</th><th>Aksi</th></tr></thead>
         <tbody>
             {% for row in rows %}
@@ -102,6 +111,6 @@
             <tr><td colspan="7">Belum ada data approval.</td></tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
 </div>
 {% endblock %}

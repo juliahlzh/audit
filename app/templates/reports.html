@@ -7,7 +7,7 @@
     </div>
 </div>
 
-<div class="card">
+<div class="filter-panel compact-filter">
     <form method="get" action="/reports">
         <div class="grid two">
             <div>
@@ -24,20 +24,20 @@
 </div>
 
 <div class="grid four">
-    <div class="card metric"><span>Total Transaksi</span><strong>{{ total }}</strong></div>
-    <div class="card metric"><span>Total Lokasi</span><strong>{{ location_total }}</strong></div>
-    <div class="card metric danger"><span>High Alert</span><strong>{{ high }}</strong></div>
-    <div class="card metric warning"><span>Need Review</span><strong>{{ medium }}</strong></div>
+    <div class="metric-card"><span>Total Transaksi</span><strong>{{ total }}</strong><small>Dalam periode</small></div>
+    <div class="metric-card"><span>Total Lokasi</span><strong>{{ location_total }}</strong><small>Lokasi terpantau</small></div>
+    <div class="metric-card danger"><span>High Alert</span><strong>{{ high }}</strong><small>Prioritas utama</small></div>
+    <div class="metric-card warning"><span>Need Review</span><strong>{{ medium }}</strong><small>Perlu klarifikasi</small></div>
 </div>
 
-<div class="card">
+<div class="panel">
     <div class="section-heading">
         <div>
             <h3>Ringkasan Per Lokasi Periode {{ period|capitalize }}</h3>
             <p class="muted">Laporan ini sengaja tidak menampilkan nama konsumen/siswa. Fokusnya adalah lokasi, jumlah temuan, indikator, dan tindak lanjut.</p>
         </div>
     </div>
-    <table>
+    <div class="table-wrap"><table>
         <thead>
             <tr>
                 <th>Lokasi/Cabang</th>
@@ -66,6 +66,6 @@
             <tr><td colspan="8">Belum ada data pada periode ini.</td></tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
 </div>
 {% endblock %}

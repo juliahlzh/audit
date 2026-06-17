@@ -30,7 +30,7 @@ from .services.system_status import get_database_warning, get_system_status
 
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="Fraud Early Warning System - Dana Masuk")
+app = FastAPI(title="FEWS Approval Monitoring")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 storage_dir = BASE_DIR.parent / "storage"
@@ -181,6 +181,57 @@ def _normalize_header(value: str) -> str:
     return "".join(ch for ch in str(value).strip().lower() if ch.isalnum() or ch.isspace()).strip()
 
 
+def _alias_lookup() -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for field_name, aliases in HEADER_ALIASES.items():
+        lookup[_normalize_header(field_name)] = field_name
+        for alias in aliases:
+            lookup[_normalize_header(alias)] = field_name
+    return lookup
+
+
+def _header_score(values) -> int:
+    lookup = _alias_lookup()
+    fields = set()
+    for value in values:
+        normalized = _normalize_header(value)
+        if normalized in lookup:
+            fields.add(lookup[normalized])
+    required_fields = {"transaction_date", "branch_name", "customer_name", "amount_input_branch", "invoice_code"}
+    required_hits = len(fields & required_fields)
+    return (required_hits * 3) + len(fields)
+
+
+def _normalize_upload_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    current_score = _header_score(df.columns)
+    if current_score >= 12:
+        df.attrs["source_row_offset"] = 2
+        return df
+
+    best_idx = None
+    best_score = current_score
+    search_limit = min(len(df), 10)
+    for idx in range(search_limit):
+        score = _header_score(df.iloc[idx].tolist())
+        if score > best_score:
+            best_idx = idx
+            best_score = score
+
+    if best_idx is None or best_score < 12:
+        df.attrs["source_row_offset"] = 2
+        return df
+
+    promoted = df.iloc[best_idx + 1 :].copy()
+    promoted.columns = [str(value).strip() for value in df.iloc[best_idx].tolist()]
+    promoted = promoted.dropna(how="all").reset_index(drop=True)
+    # With pandas' default header row, dataframe row 0 maps to Excel row 2.
+    promoted.attrs["source_row_offset"] = best_idx + 3
+    return promoted
+
+
 def _to_float(value) -> float | None:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
@@ -192,6 +243,17 @@ def _to_float(value) -> float | None:
         return float(raw)
     except ValueError:
         return None
+
+
+def _is_blank_cell(value) -> bool:
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip() in {"", "\\N", "nan", "NaN", "None"}
 
 
 def _to_datetime(value) -> datetime | None:
@@ -246,8 +308,8 @@ def _read_upload_dataframe(upload_file: UploadFile) -> pd.DataFrame:
     data = upload_file.file.read()
     filename = (upload_file.filename or "").lower()
     if filename.endswith(".csv"):
-        return pd.read_csv(BytesIO(data))
-    return pd.read_excel(BytesIO(data))
+        return _normalize_upload_dataframe(pd.read_csv(BytesIO(data)))
+    return _normalize_upload_dataframe(pd.read_excel(BytesIO(data)))
 
 
 def _extract_column(df: pd.DataFrame, field_name: str, required: bool = True) -> str | None:
@@ -540,9 +602,14 @@ def upload_branch_input_excel(
 
     inserted_rows: list[BranchInput] = []
     failed_rows: list[str] = []
+    source_row_offset = int(df.attrs.get("source_row_offset", 2))
 
     for idx, item in df.iterrows():
-        line_no = idx + 2
+        line_no = idx + source_row_offset
+        required_values = [item.get(col_date), item.get(col_branch), item.get(col_customer), item.get(col_input), item.get(col_invoice)]
+        if all(_is_blank_cell(value) for value in required_values):
+            continue
+
         trx_date = _to_date(item.get(col_date))
         if not trx_date:
             failed_rows.append(f"Baris {line_no}: tanggal transaksi tidak valid.")
@@ -616,6 +683,7 @@ def upload_branch_input_excel(
         )
 
     if inserted_rows:
+        archive_all_branch_inputs_with_results(db, user_id=user.id, reason=f"Diganti oleh upload baru: {excel_file.filename}")
         db.add_all(inserted_rows)
         db.commit()
         run_matching(db)
@@ -706,11 +774,11 @@ def alert_center(
     if date_from:
         parsed = _to_date(date_from)
         if parsed:
-            query = query.filter(BranchInput.transaction_date >= parsed)
+            query = query.filter(BranchInput.source_created_at >= datetime.combine(parsed, time.min))
     if date_to:
         parsed = _to_date(date_to)
         if parsed:
-            query = query.filter(BranchInput.transaction_date <= parsed)
+            query = query.filter(BranchInput.source_created_at <= datetime.combine(parsed, time.max))
     if indicator:
         indicator_normalized = indicator.strip().lower()
         query = query.filter(MatchingResult.triggered_rules.ilike(f"%{indicator_normalized}%"))
@@ -815,42 +883,68 @@ def reports_page(
 
 @app.get("/templates/approval-import.xlsx")
 def download_template(user: User = Depends(get_current_user)):
-    headers = [
-        "Tanggal transaksi",
-        "Nama cabang",
-        "Nama customer",
-        "Nominal yang harus dibayar",
-        "Nominal yang diinput cabang",
-        "Metode pembayaran",
-        "Kode unik/invoice",
+    columns = [
+        "id",
+        "kodelokasi",
+        "idunix",
+        "tgl_bukubesar",
+        "nokwt_awal",
+        "nokwt_akhir",
+        "jumlah_biaya",
+        "bank",
         "tgl_bank",
         "waktu_bank",
-        "ID Petugas",
-        "ID Approver",
+        "pilihan_bank",
+        "bukti_bank di relasikan ke gd mutasi bank",
+        "jumlah_setor",
+        "pegawai",
+        "tgl_approve",
+        "approve_by",
+        "keterangan_dr_lokasi",
+        "catatan",
+        "gambar",
+        "link_file",
+        "updated_at",
         "created_at",
-                "Waktu approve",
-                "Tanggal pembayaran",
-                "Tanggal setoran",
-                "Bank tujuan",
-                "Bank bukti",
-                "Rekening penerimaan",
-                "No bukti transaksi",
-                "ID Petugas Setoran",
-                "Daftar siswa",
-                "Keterangan",
+        "deleted_at",
+    ]
+    group_row = [
+        "id",
+        "Cabang",
+        "",
+        "",
+        "",
+        "",
+        "Nominal",
+        "",
+        "Tanggal Bank",
+        "Waktu TF bank",
+        "",
+        "",
+        "",
+        "Petugas Input",
+        "Tanggal Input",
+        "",
+        "Dibikin SOP",
+        "",
+        "",
+        "",
+        "",
+        "Tanggal dan Jam Input",
+        "",
     ]
     sample = [
-        ["2026-05-01", "Cabang A", "Customer A", 1200000, 1200000, "transfer", "INV-1001", "2026-05-01", "10:45:00", "623022", "609014", "2026-05-01 10:55:00", "2026-05-01 11:30:00", "2026-05-01 10:45:00", "2026-05-01", "BCA", "BCA", "COMPANY-001", "BKT-001", "623022", "Customer A", "Pembayaran Customer A Cabang A"],
-        ["2026-05-01", "Cabang A", "Customer B", 2500000, 2500000, "transfer", "INV-1002", "2026-05-01", "03:30:00", "623022", "609014", "2026-05-02 09:00:00", "2026-05-02 09:10:00", "2026-05-01 03:30:00", "2026-05-01", "BCA", "MANDIRI", "COMPANY-001", "BKT-002", "623022", "Customer B", "Perlu cek jam input Customer B Cabang A"],
+        [328174, 106, "106-260402", "2026-04-02", "86101444-106", "86101444-106", 1800000, "TRANS", "2026-04-02", "11:15:00", "BCA - - EDC & Transfer BCA NFBP 6270207918", "BCA26kml3uH8", 1800000, "623022", "2026-04-06", "609061", "AISYAH NAIRA PUTRI", "", "", "106-260402/2026-04-02_925.jpg", "2026-04-06 10:55:39", "2026-04-02 19:49:21", ""],
+        [329141, 106, "106-260401", "2026-04-01", "49133537-106", "21488049-106", 2260000, "TRANS", "2026-03-14", "23:16:00", "BCA - - EDC & Transfer BCA NFBP 6270207918", "BCA26dkJSJEF", 2260000, "614083", "2026-04-07", "609061", "NADINE RAZITA GHAISANI", "", "", "106-260401/2026-04-06_790.jpg", "2026-04-07 13:24:13", "2026-04-06 19:38:55", ""],
     ]
-    df = pd.DataFrame(sample, columns=headers)
+    df = pd.DataFrame([group_row, columns, *sample])
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Template FEWS")
+        df.to_excel(writer, index=False, header=False, sheet_name="Template Upload")
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=template_fews_approval.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=template_fews_setoran_bank.xlsx"},
     )
 
 

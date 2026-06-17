@@ -7,63 +7,73 @@
     </div>
 </div>
 
-<div class="card">
-    <form method="get" action="/alerts">
-        <div class="grid two">
-            <div>
-                <label>Status Risiko</label>
-                <select name="status">
-                    <option value="" {% if not filters.status %}selected{% endif %}>Semua</option>
-                    <option value="MATCHED" {% if filters.status == 'MATCHED' %}selected{% endif %}>MATCHED</option>
-                    <option value="NEED REVIEW" {% if filters.status == 'NEED REVIEW' %}selected{% endif %}>NEED REVIEW</option>
-                    <option value="UNMATCHED" {% if filters.status == 'UNMATCHED' %}selected{% endif %}>UNMATCHED</option>
-                </select>
+{% set has_active_filters = filters.status or filters.follow_up_status or filters.min_score > 0 or filters.branch or filters.officer or filters.indicator or filters.date_from or filters.date_to %}
+<details class="filter-panel disclosure-panel" {% if has_active_filters %}open{% endif %}>
+    <summary class="disclosure-summary">
+        <span>
+            <strong>Filter Alert</strong>
+            <small>{{ 'Filter aktif' if has_active_filters else 'Klik untuk menampilkan opsi filter' }}</small>
+        </span>
+        <span class="toggle-label"></span>
+    </summary>
+    <div class="disclosure-body">
+        <form method="get" action="/alerts">
+            <div class="filter-grid">
+                <div>
+                    <label>Status Risiko</label>
+                    <select name="status">
+                        <option value="" {% if not filters.status %}selected{% endif %}>Semua</option>
+                        <option value="MATCHED" {% if filters.status == 'MATCHED' %}selected{% endif %}>MATCHED</option>
+                        <option value="NEED REVIEW" {% if filters.status == 'NEED REVIEW' %}selected{% endif %}>NEED REVIEW</option>
+                        <option value="UNMATCHED" {% if filters.status == 'UNMATCHED' %}selected{% endif %}>UNMATCHED</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Status Tindak Lanjut</label>
+                    <select name="follow_up_status">
+                        <option value="" {% if not filters.follow_up_status %}selected{% endif %}>Semua</option>
+                        <option value="OPEN" {% if filters.follow_up_status == 'OPEN' %}selected{% endif %}>OPEN</option>
+                        <option value="CLARIFICATION" {% if filters.follow_up_status == 'CLARIFICATION' %}selected{% endif %}>CLARIFICATION</option>
+                        <option value="HOLD" {% if filters.follow_up_status == 'HOLD' %}selected{% endif %}>HOLD</option>
+                        <option value="RETURN" {% if filters.follow_up_status == 'RETURN' %}selected{% endif %}>RETURN</option>
+                        <option value="INVESTIGATION" {% if filters.follow_up_status == 'INVESTIGATION' %}selected{% endif %}>INVESTIGATION</option>
+                        <option value="RESOLVED" {% if filters.follow_up_status == 'RESOLVED' %}selected{% endif %}>RESOLVED</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Minimal Skor</label>
+                    <input type="number" name="min_score" value="{{ filters.min_score }}" min="0">
+                </div>
+                <div>
+                    <label>Nama Cabang</label>
+                    <input type="text" name="branch" value="{{ filters.branch }}" placeholder="Contoh: Cabang A">
+                </div>
+                <div>
+                    <label>Nopeg Petugas</label>
+                    <input type="text" name="officer" value="{{ filters.officer }}" placeholder="Contoh: 623022">
+                </div>
+                <div>
+                    <label>Indikator</label>
+                    <input type="text" name="indicator" value="{{ filters.indicator }}" placeholder="Contoh: bank / approval / setoran">
+                </div>
+                <div>
+                    <label>Dari Tanggal Input</label>
+                    <input type="date" name="date_from" value="{{ filters.date_from }}">
+                </div>
+                <div>
+                    <label>Sampai Tanggal Input</label>
+                    <input type="date" name="date_to" value="{{ filters.date_to }}">
+                </div>
             </div>
-            <div>
-                <label>Status Tindak Lanjut</label>
-                <select name="follow_up_status">
-                    <option value="" {% if not filters.follow_up_status %}selected{% endif %}>Semua</option>
-                    <option value="OPEN" {% if filters.follow_up_status == 'OPEN' %}selected{% endif %}>OPEN</option>
-                    <option value="CLARIFICATION" {% if filters.follow_up_status == 'CLARIFICATION' %}selected{% endif %}>CLARIFICATION</option>
-                    <option value="HOLD" {% if filters.follow_up_status == 'HOLD' %}selected{% endif %}>HOLD</option>
-                    <option value="RETURN" {% if filters.follow_up_status == 'RETURN' %}selected{% endif %}>RETURN</option>
-                    <option value="INVESTIGATION" {% if filters.follow_up_status == 'INVESTIGATION' %}selected{% endif %}>INVESTIGATION</option>
-                    <option value="RESOLVED" {% if filters.follow_up_status == 'RESOLVED' %}selected{% endif %}>RESOLVED</option>
-                </select>
+            <div class="action-row">
+                <button type="submit">Terapkan Filter</button>
+                <a class="secondary-button" href="/alerts">Reset</a>
             </div>
-            <div>
-                <label>Minimal Skor</label>
-                <input type="number" name="min_score" value="{{ filters.min_score }}" min="0">
-            </div>
-            <div>
-                <label>Nama Cabang</label>
-                <input type="text" name="branch" value="{{ filters.branch }}" placeholder="Contoh: Cabang A">
-            </div>
-            <div>
-                <label>Nopeg Petugas</label>
-                <input type="text" name="officer" value="{{ filters.officer }}" placeholder="Contoh: 623022">
-            </div>
-            <div>
-                <label>Indikator</label>
-                <input type="text" name="indicator" value="{{ filters.indicator }}" placeholder="Contoh: bank / approval / setoran">
-            </div>
-            <div>
-                <label>Dari Tanggal Transaksi</label>
-                <input type="date" name="date_from" value="{{ filters.date_from }}">
-            </div>
-            <div>
-                <label>Sampai Tanggal Transaksi</label>
-                <input type="date" name="date_to" value="{{ filters.date_to }}">
-            </div>
-        </div>
-        <div class="action-row">
-            <button type="submit">Terapkan Filter</button>
-            <a class="secondary-button" href="/alerts">Reset</a>
-        </div>
-    </form>
-</div>
+        </form>
+    </div>
+</details>
 
-<div class="alert-toolbar card">
+<div class="alert-toolbar panel">
     <div>
         <strong>{{ pagination.total_rows }} alert ditemukan</strong>
         <span class="muted">Ditampilkan {{ pagination.per_page }} data per halaman agar Alert Center tetap cepat.</span>
@@ -92,7 +102,8 @@
         <div class="alert-card-status">
             <span class="badge status-{{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</span>
             <span class="risk-level">{{ row.risk_level }}</span>
-            <span class="alert-id">#{{ row.id }}</span>
+            <span class="score-ring">Skor {{ row.risk_score }}</span>
+            <span class="alert-id">ID #{{ row.id }}</span>
         </div>
 
         <div class="alert-card-main">
@@ -100,7 +111,8 @@
                 <span class="section-label">Data Approval</span>
                 {% if row.branch_input %}
                 <strong>{{ row.branch_input.customer_name }}</strong>
-                <span>{{ row.branch_input.transaction_date|date_id }} | {{ row.branch_input.branch_name }}</span>
+                <span>Input: {{ row.branch_input.source_created_at|datetime_id if row.branch_input.source_created_at else '-' }}</span>
+                <span>Setor: {{ row.branch_input.deposit_date|date_id if row.branch_input.deposit_date else '-' }} | {{ row.branch_input.branch_name }}</span>
                 <span>Rp {{ "{:,.0f}".format(row.branch_input.amount_input_branch) }} | {{ row.branch_input.invoice_code }}</span>
                 {% if row.branch_input.officer_id %}
                 <span>Petugas: {{ row.branch_input.officer_id }}</span>
@@ -113,39 +125,48 @@
             <section class="flag-explanation">
                 <div class="flag-header">
                     <span class="section-label">Kenapa Diflag</span>
-                    <strong>Skor {{ row.risk_score }}</strong>
+                    <strong>{{ row.rule_details|length if row.rule_details else 0 }} indikator</strong>
                 </div>
 
                 {% if row.rule_details %}
                 <div class="flag-chip-row">
                     {% for rule in row.rule_details %}
-                    <span class="flag-chip" title="{{ rule.reason }}">{{ rule.name }} <strong>+{{ rule.score }}</strong></span>
+                    <span class="flag-chip risk-{{ (rule.risk_impact or rule.level)|lower }}" title="{{ rule.reason }}">{{ rule.name }} <strong>+{{ rule.score }}</strong></span>
                     {% endfor %}
                 </div>
-                <ol class="rule-list compact">
-                    {% for rule in row.rule_details %}
-                    <li>
-                        <div class="rule-title">
-                            <strong>{{ rule.name }}</strong>
-                            <span>+{{ rule.score }}</span>
-                        </div>
-                        <small class="rule-category">{{ rule.category }} | Risiko {{ rule.risk_impact or rule.level }}</small>
-                        <p>{{ rule.reason }}</p>
-                        <div class="rule-meta">
-                            <span>Ditemukan: {{ rule.observed }}</span>
-                            <span>Aturan: {{ rule.threshold }}</span>
-                            {% if rule.source_field %}<span>Sumber: {{ rule.source_field }}</span>{% endif %}
-                        </div>
-                        <details class="rule-more">
-                            <summary>Detail aturan</summary>
-                            <p class="rule-definition">{{ rule.definition }}</p>
-                            {% if rule.recommendation %}
-                            <p class="rule-recommendation"><strong>Rekomendasi:</strong> {{ rule.recommendation }}</p>
-                            {% endif %}
-                        </details>
-                    </li>
-                    {% endfor %}
-                </ol>
+                <details class="inline-disclosure rule-disclosure">
+                    <summary class="disclosure-summary compact">
+                        <span>
+                            <strong>Rincian indikator</strong>
+                            <small>Alasan, data yang ditemukan, aturan, dan sumber field</small>
+                        </span>
+                        <span class="toggle-label"></span>
+                    </summary>
+                    <ol class="rule-list compact">
+                        {% for rule in row.rule_details %}
+                        <li class="risk-{{ (rule.risk_impact or rule.level)|lower }}">
+                            <div class="rule-title">
+                                <strong>{{ rule.name }}</strong>
+                                <span>+{{ rule.score }}</span>
+                            </div>
+                            <small class="rule-category">{{ rule.category }} | Risiko {{ rule.risk_impact or rule.level }}</small>
+                            <p>{{ rule.reason }}</p>
+                            <div class="rule-meta">
+                                <span>Ditemukan: {{ rule.observed }}</span>
+                                <span>Aturan: {{ rule.threshold }}</span>
+                                {% if rule.source_field %}<span>Sumber: {{ rule.source_field }}</span>{% endif %}
+                            </div>
+                            <details class="rule-more">
+                                <summary>Detail aturan</summary>
+                                <p class="rule-definition">{{ rule.definition }}</p>
+                                {% if rule.recommendation %}
+                                <p class="rule-recommendation"><strong>Rekomendasi:</strong> {{ rule.recommendation }}</p>
+                                {% endif %}
+                            </details>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </details>
                 {% else %}
                 <p class="muted">{{ row.match_reason or row.mismatch_type or 'Lolos seluruh pengujian FEWS.' }}</p>
                 {% endif %}
@@ -153,23 +174,29 @@
 
             <section class="follow-up-box">
                 <span class="section-label">Tindak Lanjut</span>
-                <strong>{{ row.follow_up_status or 'OPEN' }}</strong>
-                <form method="post" action="/alerts/{{ row.id }}/follow-up">
-                    <select name="follow_up_status" required>
-                        <option value="CLARIFICATION">CLARIFICATION</option>
-                        <option value="HOLD">HOLD</option>
-                        <option value="RETURN">RETURN</option>
-                        <option value="INVESTIGATION">INVESTIGATION</option>
-                        <option value="RESOLVED">RESOLVED</option>
-                    </select>
-                    <input type="text" name="follow_up_notes" placeholder="Catatan klarifikasi / alasan hold-return" required>
-                    <button type="submit">Simpan</button>
-                </form>
+                <strong class="follow-up-state">{{ row.follow_up_status or 'OPEN' }}</strong>
+                <details class="inline-disclosure follow-up-disclosure">
+                    <summary class="disclosure-summary compact">
+                        <span><strong>Ubah status</strong></span>
+                        <span class="toggle-label"></span>
+                    </summary>
+                    <form method="post" action="/alerts/{{ row.id }}/follow-up">
+                        <select name="follow_up_status" required>
+                            <option value="CLARIFICATION">CLARIFICATION</option>
+                            <option value="HOLD">HOLD</option>
+                            <option value="RETURN">RETURN</option>
+                            <option value="INVESTIGATION">INVESTIGATION</option>
+                            <option value="RESOLVED">RESOLVED</option>
+                        </select>
+                        <input type="text" name="follow_up_notes" placeholder="Catatan klarifikasi / alasan hold-return" required>
+                        <button type="submit">Simpan</button>
+                    </form>
+                </details>
             </section>
         </div>
     </article>
     {% else %}
-    <div class="card empty-state">Belum ada hasil deteksi.</div>
+    <div class="panel empty-state">Belum ada hasil deteksi.</div>
     {% endfor %}
 </div>
 {% endblock %}

@@ -14,7 +14,7 @@
 {% endif %}
 
 {% if user.role in ["admin", "auditor"] %}
-<div class="card form-card">
+<div class="panel form-card">
     <h3>Upload Excel Mutasi Bank</h3>
     <p class="muted">
         Bisa upload `.xlsx/.xls/.csv`. Header fleksibel, contoh: Tanggal Dana Masuk, Nama Pengirim, Nominal Masuk.
@@ -25,7 +25,7 @@
     </form>
 </div>
 
-<div class="card form-card">
+<div class="panel form-card">
     <form method="post" action="/bank-mutations/new">
         <div class="grid two">
             <div>
@@ -58,8 +58,8 @@
 </div>
 {% endif %}
 
-<div class="card">
-    <table>
+<div class="panel">
+    <div class="table-wrap"><table>
         <thead>
             <tr>
                 <th>ID</th>
@@ -84,6 +84,6 @@
             <tr><td colspan="6">Belum ada data mutasi bank.</td></tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
 </div>
 {% endblock %}

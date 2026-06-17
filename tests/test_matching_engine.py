@@ -49,6 +49,8 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIn("rentang waktu perhatian", results[0].match_reason)
         self.assertEqual(results[0].risk_score, 1)
+        self.assertEqual(results[0].status, "NEED REVIEW")
+        self.assertEqual(results[0].follow_up_status, "OPEN")
 
     def test_amount_mismatch_flag(self):
         db = self.Session()
@@ -61,11 +63,19 @@ class MatchingEngineTests(unittest.TestCase):
 
     def test_date_mismatch_flag(self):
         db = self.Session()
-        db.add(self._insert_branch(bank_date=date.today() - timedelta(days=1), invoice_code="INV-DATE"))
+        db.add(
+            self._insert_branch(
+                deposit_date=date(2026, 6, 1),
+                source_created_at=datetime(2026, 6, 5, 14, 30),
+                invoice_code="INV-DATE",
+            )
+        )
         db.commit()
 
         results = run_matching(db)
-        self.assertIn("tanggal bank", results[0].match_reason.lower())
+        self.assertIn("tanggal input dan tanggal setor", results[0].match_reason.lower())
+        self.assertNotIn("tanggal transaksi", results[0].match_reason.lower())
+        self.assertNotIn("tanggal bank", results[0].match_reason.lower())
 
     def test_late_input_flag(self):
         db = self.Session()
@@ -84,8 +94,9 @@ class MatchingEngineTests(unittest.TestCase):
 
         results = run_matching(db)
         self.assertIn("melewati batas", results[0].match_reason)
-        self.assertIn("tanggal transaksi Senin, 01/06/2026", results[0].match_reason)
+        self.assertIn("tanggal setor Senin, 01/06/2026", results[0].match_reason)
         self.assertIn("tanggal input Jumat, 05/06/2026 14:30", results[0].match_reason)
+        self.assertNotIn("tanggal transaksi", results[0].match_reason.lower())
 
     def test_inputter_mismatch_no_longer_flags(self):
         db = self.Session()
@@ -95,6 +106,8 @@ class MatchingEngineTests(unittest.TestCase):
         results = run_matching(db)
         self.assertNotIn("NOPEG", results[0].match_reason)
         self.assertEqual(results[0].risk_score, 0)
+        self.assertEqual(results[0].status, "MATCHED")
+        self.assertEqual(results[0].follow_up_status, "RESOLVED")
 
 
 if __name__ == "__main__":

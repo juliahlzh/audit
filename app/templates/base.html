@@ -3,37 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FEWS</title>
+    <title>FEWS Approval Monitoring</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="layout">
         <aside class="sidebar">
-            <div>
-                <h1>FEWS</h1>
-                <p class="muted">Fraud Early Warning System</p>
+            <div class="brand-block">
+                <div>
+                    <h1>FEWS</h1>
+                    <p>Approval Monitoring</p>
+                </div>
             </div>
             {% if user %}
             <nav class="nav">
-                <a href="/dashboard">Dashboard</a>
-                <a href="/branch-inputs">Upload Excel</a>
-                <a href="/alerts">Alert Center</a>
-                <a href="/reports">Laporan</a>
+                <a href="/dashboard" data-nav="/dashboard"><span class="nav-icon">□</span>Dashboard</a>
+                <a href="/branch-inputs" data-nav="/branch-inputs"><span class="nav-icon">↑</span>Upload Excel</a>
+                <a href="/alerts" data-nav="/alerts"><span class="nav-icon">!</span>Alert Center</a>
+                <a href="/reports" data-nav="/reports"><span class="nav-icon">▦</span>Laporan</a>
                 {% if user.role in ["admin", "auditor"] %}
                 <form method="post" action="/matching/run">
-                    <button class="nav-button" type="submit">Jalankan Deteksi Ulang</button>
+                    <button class="nav-button" type="submit"><span class="nav-icon">↻</span>Jalankan Deteksi</button>
                 </form>
                 {% endif %}
-                <a href="/logs">Riwayat Sistem</a>
-                <a href="/reports/excel">Export Excel</a>
-                <a href="/reports/pdf">Export PDF</a>
-                <a href="/logout">Logout</a>
+                <a href="/logs" data-nav="/logs"><span class="nav-icon">≡</span>Riwayat Sistem</a>
+                <div class="nav-group">
+                    <a href="/reports/excel"><span class="nav-icon">X</span>Export Excel</a>
+                    <a href="/reports/pdf"><span class="nav-icon">P</span>Export PDF</a>
+                </div>
+                <a href="/logout" class="nav-exit"><span class="nav-icon">→</span>Logout</a>
             </nav>
             {% endif %}
         </aside>
         <main class="content">
+            {% if user %}
+            <header class="topbar">
+                <button class="sidebar-toggle" type="button" aria-label="Toggle navigation">☰</button>
+                <div class="topbar-title">
+                    <span>Monitoring Approval</span>
+                    <strong>{{ user.full_name }}</strong>
+                </div>
+                <div class="user-badge">{{ user.role }}</div>
+            </header>
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script>
+        const currentPath = window.location.pathname;
+        document.querySelectorAll("[data-nav]").forEach((item) => {
+            const target = item.getAttribute("data-nav");
+            if (currentPath === target || currentPath.startsWith(target + "/")) item.classList.add("active");
+        });
+        document.querySelector(".sidebar-toggle")?.addEventListener("click", () => {
+            document.body.classList.toggle("sidebar-open");
+        });
+        document.querySelectorAll('input[type="file"]').forEach((input) => {
+            input.addEventListener("change", () => {
+                const name = input.files?.[0]?.name || "Belum ada file dipilih";
+                input.closest("form")?.style.setProperty("--selected-file", `"${name}"`);
+                input.dataset.filename = name;
+                const hint = input.closest(".file-drop")?.querySelector(".file-hint");
+                if (hint) hint.textContent = name;
+            });
+        });
+    </script>
 </body>
 </html>

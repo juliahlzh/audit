@@ -3,24 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login FEWS</title>
+    <title>Login FEWS Approval Monitoring</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="login-page">
     <div class="login-card">
-        <h1>FEWS Login</h1>
-        <p>Sistem lokal fraud monitoring untuk divisi keuangan.</p>
+        <div class="login-brand">
+            <div>
+                <h1>FEWS</h1>
+                <p>Monitoring approval keuangan dan early warning fraud.</p>
+            </div>
+        </div>
         {% if error %}
         <div class="alert red">{{ error }}</div>
         {% endif %}
         <form method="post" action="/login">
-            <label>Username</label>
-            <input type="text" name="username" required>
-            <label>Password</label>
-            <input type="password" name="password" required>
+            <label for="username">Username</label>
+            <input id="username" type="text" name="username" required>
+            <label for="password">Password</label>
+            <input id="password" type="password" name="password" required>
             <button type="submit">Masuk</button>
         </form>
         <div class="hint">
+            <strong>Akun demo</strong>
             <div>admin / admin123</div>
             <div>auditor / auditor123</div>
             <div>viewer / viewer123</div>

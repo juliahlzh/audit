@@ -165,6 +165,63 @@ class SopFewsTests(unittest.TestCase):
         self.assertIn("late_input_transfer", results["FRI-TUE-LATE"])
         self.assertIn("2 hari kerja", results["FRI-TUE-LATE"]["late_input_transfer"]["reason"])
 
+    def test_late_input_ignores_indonesia_holidays_and_collective_leave(self):
+        db = self.Session()
+        db.add(
+            self._insert_branch(
+                invoice_code="NYEPI-CUTI-OK",
+                payment_method="transfer",
+                deposit_date=date(2026, 3, 17),
+                source_created_at=datetime(2026, 3, 20, 9, 0),
+            )
+        )
+        db.add(
+            self._insert_branch(
+                invoice_code="LEBARAN-CUTI-LATE",
+                payment_method="transfer",
+                deposit_date=date(2026, 3, 14),
+                source_created_at=datetime(2026, 4, 6, 19, 38),
+            )
+        )
+        db.commit()
+
+        results = {row.branch_input.invoice_code: self._rules(row) for row in run_matching(db)}
+
+        self.assertNotIn("late_input_transfer", results["NYEPI-CUTI-OK"])
+        self.assertIn("late_input_transfer", results["LEBARAN-CUTI-LATE"])
+        self.assertIn("10 hari kerja", results["LEBARAN-CUTI-LATE"]["late_input_transfer"]["reason"])
+        self.assertNotIn("16 hari kerja", results["LEBARAN-CUTI-LATE"]["late_input_transfer"]["reason"])
+
+    def test_late_input_more_than_10_business_days_is_red_warning(self):
+        db = self.Session()
+        db.add(
+            self._insert_branch(
+                invoice_code="LATE-10-NOT-RED",
+                payment_method="transfer",
+                deposit_date=date(2026, 3, 14),
+                source_created_at=datetime(2026, 4, 6, 19, 38),
+            )
+        )
+        db.add(
+            self._insert_branch(
+                invoice_code="LATE-11-RED",
+                payment_method="transfer",
+                deposit_date=date(2026, 3, 14),
+                source_created_at=datetime(2026, 4, 7, 19, 38),
+            )
+        )
+        db.commit()
+
+        results = {row.branch_input.invoice_code: row for row in run_matching(db)}
+        ten_day_rule = self._rules(results["LATE-10-NOT-RED"])["late_input_transfer"]
+        eleven_day_rule = self._rules(results["LATE-11-RED"])["late_input_transfer"]
+
+        self.assertEqual(ten_day_rule["score"], 4)
+        self.assertEqual(results["LATE-10-NOT-RED"].status, "NEED REVIEW")
+        self.assertEqual(eleven_day_rule["score"], 8)
+        self.assertEqual(eleven_day_rule["risk_impact"], "Tinggi")
+        self.assertEqual(results["LATE-11-RED"].status, "UNMATCHED")
+
     def test_late_input_uses_ddmmyyyy_business_day_gap_not_reversed_date(self):
         db = self.Session()
         db.add(
@@ -174,7 +231,7 @@ class SopFewsTests(unittest.TestCase):
                 transaction_date=date(2026, 4, 1),
                 deposit_date=date(2026, 4, 1),
                 bank_date=date(2026, 4, 1),
-                source_created_at=datetime(2026, 4, 4, 12, 49),
+                source_created_at=datetime(2026, 4, 6, 12, 49),
             )
         )
         db.commit()
@@ -185,7 +242,7 @@ class SopFewsTests(unittest.TestCase):
         self.assertIn("2 hari kerja", rules["late_input_transfer"]["reason"])
         self.assertNotIn("90 hari", rules["late_input_transfer"]["reason"])
 
-    def test_amount_and_split_are_flagged_without_removed_indicators(self):
+    def test_amount_mismatch_is_flagged_without_removed_indicators(self):
         db = self.Session()
         for idx in range(5):
             db.add(
@@ -204,7 +261,7 @@ class SopFewsTests(unittest.TestCase):
         rules = self._rules(run_matching(db)[0])
 
         self.assertIn("amount_mismatch", rules)
-        self.assertIn("split_txn", rules)
+        self.assertNotIn("split_txn", rules)
         self.assertNotIn("inputter_mismatch", rules)
         self.assertNotIn("user_dominance", rules)
         self.assertNotIn("missing_note", rules)
@@ -217,7 +274,6 @@ class SopFewsTests(unittest.TestCase):
             "late_input_cash",
             "date_mismatch",
             "amount_mismatch",
-            "split_txn",
         }
         db = self.Session()
         db.add(

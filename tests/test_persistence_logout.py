@@ -144,6 +144,40 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertIn("Jumat, 05/06/2026", page.text)
         self.assertNotIn(">2026-06-05<", page.text)
 
+    def test_upload_accepts_original_setoran_bank_two_row_header_template(self):
+        self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
+        workbook = BytesIO()
+        df = pd.DataFrame(
+            [
+                ["id", "Cabang", "", "", "", "", "Nominal", "", "Tanggal Bank", "Waktu TF bank", "", "", "", "Petugas Input", "Tanggal Input", "", "Dibikin SOP ", "", "", "", "", "Tanggal dan Jam Input", ""],
+                ["id", "kodelokasi", "idunix", "tgl_bukubesar", "nokwt_awal", "nokwt_akhir", "jumlah_biaya", "bank", "tgl_bank", "waktu_bank", "pilihan_bank", "bukti_bank di relasikan ke gd mutasi bank", "jumlah_setor", "pegawai", "tgl_approve", "approve_by", "keterangan_dr_lokasi", "catatan", "gambar", "link_file", "updated_at", "created_at", "deleted_at"],
+                [328174, 106, "106-260402", "2026-04-02", "86101444-106", "86101444-106", 1800000, "TRANS", "2026-04-02", "11:15:00", "BCA", "BCA26kml3uH8", 1800000, "623022", "2026-04-06", "609061", "AISYAH NAIRA PUTRI", "", "", "106-260402/2026-04-02_925.jpg", "2026-04-06 10:55:39", "2026-04-02 19:49:21", ""],
+                ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+            ]
+        )
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, header=False)
+        workbook.seek(0)
+
+        response = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("setoran-bank.xlsx", workbook.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("imported=1", response.headers["location"])
+        self.assertIn("failed=0", response.headers["location"])
+        row = self.db.query(BranchInput).filter(BranchInput.invoice_code == "106-260402").one()
+        self.assertEqual(row.branch_name, "106")
+        self.assertEqual(row.customer_name, "AISYAH NAIRA PUTRI")
+        self.assertEqual(row.transaction_date.isoformat(), "2026-04-02")
+        self.assertEqual(row.source_created_at.strftime("%Y-%m-%d %H:%M"), "2026-04-02 19:49")
+        self.assertEqual(row.deposit_date.isoformat(), "2026-04-02")
+        self.assertEqual(row.source_row_number, 3)
+        self.assertEqual(self.db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).count(), 1)
+        self.assertIsNotNone(self.db.query(BranchInput).filter(BranchInput.invoice_code == "INV-PERSIST").one().archived_at)
+
 
 if __name__ == "__main__":
     unittest.main()
