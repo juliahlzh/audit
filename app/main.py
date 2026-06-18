@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
@@ -6,14 +8,13 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
-import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from sqlalchemy import inspect
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import verify_password
@@ -202,7 +203,7 @@ def _header_score(values) -> int:
     return (required_hits * 3) + len(fields)
 
 
-def _normalize_upload_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def _normalize_upload_dataframe(df):
     if df.empty:
         return df
 
@@ -233,6 +234,8 @@ def _normalize_upload_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _to_float(value) -> float | None:
+    import pandas as pd
+
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, (int, float)):
@@ -246,6 +249,8 @@ def _to_float(value) -> float | None:
 
 
 def _is_blank_cell(value) -> bool:
+    import pandas as pd
+
     if value is None:
         return True
     try:
@@ -257,6 +262,8 @@ def _is_blank_cell(value) -> bool:
 
 
 def _to_datetime(value) -> datetime | None:
+    import pandas as pd
+
     raw = str(value).strip() if value is not None else ""
     year_first = bool(re.match(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}", raw))
     ts = pd.to_datetime(value, errors="coerce", dayfirst=not year_first)
@@ -266,6 +273,8 @@ def _to_datetime(value) -> datetime | None:
 
 
 def _to_date(value):
+    import pandas as pd
+
     raw = str(value).strip() if value is not None else ""
     year_first = bool(re.match(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}", raw))
     ts = pd.to_datetime(value, errors="coerce", dayfirst=not year_first)
@@ -275,6 +284,8 @@ def _to_date(value):
 
 
 def _to_time(value) -> time | None:
+    import pandas as pd
+
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, time):
@@ -304,7 +315,9 @@ def _combine_date_time(date_value, time_value) -> datetime | None:
     return datetime.combine(parsed_date, parsed_time)
 
 
-def _read_upload_dataframe(upload_file: UploadFile) -> pd.DataFrame:
+def _read_upload_dataframe(upload_file: UploadFile):
+    import pandas as pd
+
     data = upload_file.file.read()
     filename = (upload_file.filename or "").lower()
     if filename.endswith(".csv"):
@@ -312,7 +325,7 @@ def _read_upload_dataframe(upload_file: UploadFile) -> pd.DataFrame:
     return _normalize_upload_dataframe(pd.read_excel(BytesIO(data)))
 
 
-def _extract_column(df: pd.DataFrame, field_name: str, required: bool = True) -> str | None:
+def _extract_column(df, field_name: str, required: bool = True) -> str | None:
     normalized_map = {_normalize_header(col): col for col in df.columns}
     for alias in HEADER_ALIASES[field_name]:
         found = normalized_map.get(_normalize_header(alias))
@@ -381,13 +394,6 @@ def _dashboard_summary(db: Session):
 
 
 def _build_periodic_summary(db: Session, period: str = "harian") -> dict:
-    rows = (
-        db.query(MatchingResult)
-        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
-        .filter(BranchInput.archived_at.is_(None))
-        .order_by(MatchingResult.created_at.desc())
-        .all()
-    )
     now = datetime.utcnow()
     if period == "mingguan":
         cutoff = now - timedelta(days=7)
@@ -395,7 +401,17 @@ def _build_periodic_summary(db: Session, period: str = "harian") -> dict:
         cutoff = now - timedelta(days=30)
     else:
         cutoff = now - timedelta(days=1)
-    scoped = [r for r in rows if r.created_at and r.created_at >= cutoff]
+    scoped = (
+        db.query(MatchingResult)
+        .options(joinedload(MatchingResult.branch_input))
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(
+            BranchInput.archived_at.is_(None),
+            MatchingResult.created_at >= cutoff,
+        )
+        .order_by(MatchingResult.created_at.desc())
+        .all()
+    )
     location_rows = summarize_by_location(scoped)
     return {
         "total": len(scoped),
@@ -760,7 +776,12 @@ def alert_center(
 ):
     page = max(1, page)
     per_page = min(max(10, per_page), 100)
-    query = db.query(MatchingResult).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None))
+    query = (
+        db.query(MatchingResult)
+        .options(joinedload(MatchingResult.branch_input))
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(BranchInput.archived_at.is_(None))
+    )
     if status:
         query = query.filter(MatchingResult.status == status)
     if follow_up_status:
@@ -883,6 +904,8 @@ def reports_page(
 
 @app.get("/templates/approval-import.xlsx")
 def download_template(user: User = Depends(get_current_user)):
+    import pandas as pd
+
     columns = [
         "id",
         "kodelokasi",
@@ -950,13 +973,13 @@ def download_template(user: User = Depends(get_current_user)):
 
 @app.get("/reports/excel")
 def export_excel(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = db.query(MatchingResult).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
+    rows = db.query(MatchingResult).options(joinedload(MatchingResult.branch_input)).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
     data = build_excel_report(rows)
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=fews_dana_masuk_report.xlsx"})
 
 
 @app.get("/reports/pdf")
 def export_pdf(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = db.query(MatchingResult).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
+    rows = db.query(MatchingResult).options(joinedload(MatchingResult.branch_input)).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
     data = build_pdf_report(rows)
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=fews_dana_masuk_report.pdf"})

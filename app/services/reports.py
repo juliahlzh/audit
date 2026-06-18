@@ -2,12 +2,6 @@ from io import BytesIO
 import json
 from collections import Counter, defaultdict
 
-import pandas as pd
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
 DAY_NAMES_ID = {
     0: "Senin",
     1: "Selasa",
@@ -115,6 +109,8 @@ def summarize_by_location(transactions):
 
 
 def build_excel_report(transactions):
+    import pandas as pd
+
     rows = [
             {
                 "Lokasi/Cabang": row["location"],
@@ -139,6 +135,11 @@ def build_excel_report(transactions):
 
 
 def build_pdf_report(transactions):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     output = BytesIO()
     doc = SimpleDocTemplate(output, pagesize=A4)
     styles = getSampleStyleSheet()
