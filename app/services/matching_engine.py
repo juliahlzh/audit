@@ -209,7 +209,7 @@ def run_matching(db: Session) -> list[MatchingResult]:
                 )
             )
 
-        reference_date = item.deposit_date
+        reference_date = item.bank_date or item.deposit_date
         if item.source_created_at and reference_date:
             late_days = _business_day_gap(reference_date, item.source_created_at)
             if late_days > late_input_max_days:
@@ -219,11 +219,11 @@ def run_matching(db: Session) -> list[MatchingResult]:
                 triggered.append(
                     _trigger(
                         rule_code,
-                        f"Tanggal setor/pembayaran {_date_label(reference_date)}, tanggal input {input_at_label}, terlambat {late_days} hari kerja",
+                        f"Tanggal bank {_date_label(reference_date)}, tanggal input {input_at_label}, terlambat {late_days} hari kerja",
                         f"Maksimal H+{late_input_max_days} hari kerja; klasifikasi {severity}",
-                    f"Input data setor metode {item.payment_method} terlambat {late_days} hari kerja dari tanggal setor {_date_label(reference_date)} ke tanggal input {input_at_label}, melewati batas H+{late_input_max_days} hari kerja.",
+                    f"Input data setor metode {item.payment_method} terlambat {late_days} hari kerja dari tanggal bank {_date_label(reference_date)} ke tanggal input {input_at_label}, melewati batas H+{late_input_max_days} hari kerja.",
                         score=rule_score,
-                        source_field="deposit_date/source_created_at/payment_method",
+                        source_field="bank_date/source_created_at/payment_method",
                     )
                 )
 

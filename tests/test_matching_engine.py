@@ -94,7 +94,7 @@ class MatchingEngineTests(unittest.TestCase):
 
         results = run_matching(db)
         self.assertIn("melewati batas", results[0].match_reason)
-        self.assertIn("tanggal setor Senin, 01/06/2026", results[0].match_reason)
+        self.assertIn("tanggal bank Senin, 01/06/2026", results[0].match_reason)
         self.assertIn("tanggal input Jumat, 05/06/2026 14:30", results[0].match_reason)
         self.assertNotIn("tanggal transaksi", results[0].match_reason.lower())
 

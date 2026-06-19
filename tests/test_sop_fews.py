@@ -115,7 +115,8 @@ class SopFewsTests(unittest.TestCase):
     def test_late_input_uses_excel_score_tiers(self):
         db = self.Session()
         cases = [
-            ("LATE-3", datetime(2026, 6, 4, 9, 0), 1),
+            ("ON-TIME-H2", datetime(2026, 6, 3, 9, 0), None),
+            ("LATE-H3", datetime(2026, 6, 4, 9, 0), 1),
             ("LATE-5", datetime(2026, 6, 6, 9, 0), 2),
             ("LATE-9", datetime(2026, 6, 12, 9, 0), 4),
         ]
@@ -134,36 +135,40 @@ class SopFewsTests(unittest.TestCase):
         results = {row.branch_input.invoice_code: self._rules(row) for row in run_matching(db)}
 
         for invoice, _input_at, expected_score in cases:
-            self.assertIn("late_input_transfer", results[invoice])
-            self.assertEqual(results[invoice]["late_input_transfer"]["score"], expected_score)
+            if expected_score is None:
+                self.assertNotIn("late_input_transfer", results[invoice])
+            else:
+                self.assertIn("late_input_transfer", results[invoice])
+                self.assertEqual(results[invoice]["late_input_transfer"]["score"], expected_score)
 
-    def test_late_input_ignores_weekends_for_h_plus_one(self):
+    def test_late_input_starts_after_h_plus_two_business_days_from_bank_date(self):
         db = self.Session()
         db.add(
             self._insert_branch(
-                invoice_code="FRI-MON-OK",
+                invoice_code="FRI-TUE-H2-OK",
                 payment_method="transfer",
-                deposit_date=date(2026, 6, 5),
+                deposit_date=date(2026, 6, 1),
                 bank_date=date(2026, 6, 5),
-                source_created_at=datetime(2026, 6, 8, 9, 0),
+                source_created_at=datetime(2026, 6, 9, 9, 0),
             )
         )
         db.add(
             self._insert_branch(
-                invoice_code="FRI-TUE-LATE",
+                invoice_code="FRI-WED-H3-LATE",
                 payment_method="transfer",
-                deposit_date=date(2026, 6, 5),
+                deposit_date=date(2026, 6, 1),
                 bank_date=date(2026, 6, 5),
-                source_created_at=datetime(2026, 6, 9, 9, 0),
+                source_created_at=datetime(2026, 6, 10, 9, 0),
             )
         )
         db.commit()
 
         results = {row.branch_input.invoice_code: self._rules(row) for row in run_matching(db)}
 
-        self.assertNotIn("late_input_transfer", results["FRI-MON-OK"])
-        self.assertIn("late_input_transfer", results["FRI-TUE-LATE"])
-        self.assertIn("2 hari kerja", results["FRI-TUE-LATE"]["late_input_transfer"]["reason"])
+        self.assertNotIn("late_input_transfer", results["FRI-TUE-H2-OK"])
+        self.assertIn("late_input_transfer", results["FRI-WED-H3-LATE"])
+        self.assertIn("3 hari kerja", results["FRI-WED-H3-LATE"]["late_input_transfer"]["reason"])
+        self.assertIn("tanggal bank", results["FRI-WED-H3-LATE"]["late_input_transfer"]["reason"].lower())
 
     def test_late_input_ignores_indonesia_holidays_and_collective_leave(self):
         db = self.Session()
@@ -172,6 +177,7 @@ class SopFewsTests(unittest.TestCase):
                 invoice_code="NYEPI-CUTI-OK",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 17),
+                bank_date=date(2026, 3, 17),
                 source_created_at=datetime(2026, 3, 20, 9, 0),
             )
         )
@@ -180,6 +186,7 @@ class SopFewsTests(unittest.TestCase):
                 invoice_code="LEBARAN-CUTI-LATE",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 14),
+                bank_date=date(2026, 3, 14),
                 source_created_at=datetime(2026, 4, 6, 19, 38),
             )
         )
@@ -199,6 +206,7 @@ class SopFewsTests(unittest.TestCase):
                 invoice_code="LATE-10-NOT-RED",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 14),
+                bank_date=date(2026, 3, 14),
                 source_created_at=datetime(2026, 4, 6, 19, 38),
             )
         )
@@ -207,6 +215,7 @@ class SopFewsTests(unittest.TestCase):
                 invoice_code="LATE-11-RED",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 14),
+                bank_date=date(2026, 3, 14),
                 source_created_at=datetime(2026, 4, 7, 19, 38),
             )
         )
@@ -231,7 +240,7 @@ class SopFewsTests(unittest.TestCase):
                 transaction_date=date(2026, 4, 1),
                 deposit_date=date(2026, 4, 1),
                 bank_date=date(2026, 4, 1),
-                source_created_at=datetime(2026, 4, 6, 12, 49),
+                source_created_at=datetime(2026, 4, 7, 12, 49),
             )
         )
         db.commit()
@@ -239,7 +248,7 @@ class SopFewsTests(unittest.TestCase):
         rules = self._rules(run_matching(db)[0])
 
         self.assertIn("late_input_transfer", rules)
-        self.assertIn("2 hari kerja", rules["late_input_transfer"]["reason"])
+        self.assertIn("3 hari kerja", rules["late_input_transfer"]["reason"])
         self.assertNotIn("90 hari", rules["late_input_transfer"]["reason"])
 
     def test_amount_mismatch_is_flagged_without_removed_indicators(self):
