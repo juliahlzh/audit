@@ -1,16 +1,19 @@
 import json
+import os
 import subprocess
 import sys
 import unittest
 from datetime import date, datetime
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth import hash_password
 from app.database import Base, get_db
+import app.main as main_module
 from app.main import app
 from app.models import BranchInput, MatchingResult, User
 
@@ -121,6 +124,75 @@ class QueryPerformanceTests(unittest.TestCase):
         loaded = json.loads(result.stdout.strip().splitlines()[-1])
         self.assertFalse(loaded["pandas"])
         self.assertFalse(loaded["reportlab"])
+
+    def test_vercel_startup_does_not_run_schema_migrations(self):
+        with patch.dict("os.environ", {"VERCEL": "1"}, clear=False), patch.object(
+            main_module, "init_db"
+        ) as init_db:
+            main_module.startup_event()
+
+        init_db.assert_not_called()
+
+    def test_dashboard_summary_does_not_return_all_database_entities(self):
+        self.db.expunge_all()
+
+        summary = main_module._dashboard_summary(self.db)
+
+        self.assertEqual(summary["total_branch"], 25)
+        self.assertEqual(summary["total_need_review"], 25)
+        self.assertNotIn("branch_inputs", summary)
+        self.assertNotIn("results", summary)
+        loaded_business_rows = [
+            value
+            for value in self.db.identity_map.values()
+            if isinstance(value, (BranchInput, MatchingResult))
+        ]
+        self.assertLessEqual(len(loaded_business_rows), 15)
+
+    def test_branch_inputs_page_is_paginated(self):
+        response = self.client.get("/branch-inputs?per_page=20&page=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("INV-24", response.text)
+        self.assertNotIn("INV-4<", response.text)
+        self.assertIn("25 data approval", response.text)
+
+    def test_responses_include_server_timing_header(self):
+        response = self.client.get("/alerts")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("app;dur=", response.headers.get("server-timing", ""))
+        self.assertRegex(response.headers.get("x-fews-response-time-ms", ""), r"^\d+\.\d$")
+
+    def test_performance_indexes_are_created_idempotently(self):
+        original_engine = main_module.engine
+        main_module.engine = self.engine
+        try:
+            main_module._run_schema_migrations()
+            main_module._run_schema_migrations()
+        finally:
+            main_module.engine = original_engine
+
+        branch_indexes = {item["name"] for item in inspect(self.engine).get_indexes("branch_inputs")}
+        result_indexes = {item["name"] for item in inspect(self.engine).get_indexes("matching_results")}
+        self.assertIn("ix_branch_inputs_active_transaction", branch_indexes)
+        self.assertIn("ix_branch_inputs_source_created_at", branch_indexes)
+        self.assertIn("ix_matching_results_risk_updated", result_indexes)
+
+    def test_migration_script_runs_from_project_root(self):
+        environment = os.environ.copy()
+        environment["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+
+        result = subprocess.run(
+            [sys.executable, "scripts/migrate_database.py"],
+            cwd=".",
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Migration FEWS selesai", result.stdout)
 
 
 if __name__ == "__main__":

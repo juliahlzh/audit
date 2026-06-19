@@ -85,6 +85,22 @@
         </form>
         {% endif %}
     </div>
+    <div class="alert-toolbar">
+        <strong>{{ pagination.total_rows }} data approval</strong>
+        <div class="pager">
+            {% if pagination.has_prev %}
+            <a href="/branch-inputs?page={{ pagination.page - 1 }}&per_page={{ pagination.per_page }}">Sebelumnya</a>
+            {% else %}
+            <span class="disabled">Sebelumnya</span>
+            {% endif %}
+            <strong>{{ pagination.page }} / {{ pagination.total_pages }}</strong>
+            {% if pagination.has_next %}
+            <a href="/branch-inputs?page={{ pagination.page + 1 }}&per_page={{ pagination.per_page }}">Berikutnya</a>
+            {% else %}
+            <span class="disabled">Berikutnya</span>
+            {% endif %}
+        </div>
+    </div>
     <div class="table-wrap"><table>
         <thead><tr><th>ID</th><th>Tanggal</th><th>Cabang</th><th>Customer</th><th>Invoice</th><th>Nominal Input</th><th>Aksi</th></tr></thead>
         <tbody>

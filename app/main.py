@@ -4,7 +4,10 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 import json
+import logging
+import os
 import re
+from time import perf_counter
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,7 +15,7 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
@@ -38,6 +41,19 @@ storage_dir = BASE_DIR.parent / "storage"
 if storage_dir.exists():
     app.mount("/storage", StaticFiles(directory=str(storage_dir)), name="storage")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+logger = logging.getLogger("fews.performance")
+
+
+@app.middleware("http")
+async def add_server_timing(request: Request, call_next):
+    started_at = perf_counter()
+    response = await call_next(request)
+    duration_ms = (perf_counter() - started_at) * 1000
+    response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
+    response.headers["X-FEWS-Response-Time-Ms"] = f"{duration_ms:.1f}"
+    if duration_ms >= 1000:
+        logger.warning("Slow request %s %s took %.1f ms", request.method, request.url.path, duration_ms)
+    return response
 
 DAY_NAMES_ID = {
     0: "Senin",
@@ -156,10 +172,31 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("matching_results", "triggered_rules", "TEXT")
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_branch_inputs_active_transaction "
+                "ON branch_inputs (archived_at, transaction_date, id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_branch_inputs_source_created_at "
+                "ON branch_inputs (source_created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_matching_results_risk_updated "
+                "ON matching_results (risk_score, updated_at)"
+            )
+        )
 
 
 @app.on_event("startup")
 def startup_event():
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+        return
     init_db()
 
 
@@ -337,33 +374,44 @@ def _extract_column(df, field_name: str, required: bool = True) -> str | None:
 
 
 def _dashboard_summary(db: Session):
-    branch_inputs = db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).order_by(BranchInput.transaction_date.desc()).all()
-    results = (
-        db.query(MatchingResult)
+    total_branch = db.query(func.count(BranchInput.id)).filter(BranchInput.archived_at.is_(None)).scalar() or 0
+    status_counter = dict(
+        db.query(MatchingResult.status, func.count(MatchingResult.id))
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
         .filter(BranchInput.archived_at.is_(None))
-        .order_by(MatchingResult.created_at.desc())
+        .group_by(MatchingResult.status)
         .all()
     )
-
-    status_counter = Counter(item.status for item in results)
-    risk_counter = Counter(item.risk_level for item in results)
-
-    daily_map = defaultdict(lambda: {"branch": 0})
-    for item in branch_inputs:
-        daily_map[item.transaction_date.isoformat()]["branch"] += 1
-
-    sorted_labels = sorted(daily_map.keys())
-    sorted_labels = sorted_labels[-10:]
-    branch_series = [daily_map[key]["branch"] for key in sorted_labels]
+    total_high_alert = (
+        db.query(func.count(MatchingResult.id))
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(BranchInput.archived_at.is_(None), MatchingResult.risk_score > 7)
+        .scalar()
+        or 0
+    )
+    trend_rows = (
+        db.query(BranchInput.transaction_date, func.count(BranchInput.id))
+        .filter(BranchInput.archived_at.is_(None))
+        .group_by(BranchInput.transaction_date)
+        .order_by(BranchInput.transaction_date.desc())
+        .limit(10)
+        .all()
+    )
+    trend_rows.reverse()
+    sorted_labels = [row[0].isoformat() for row in trend_rows]
+    branch_series = [row[1] for row in trend_rows]
     trend_max = max(branch_series) if branch_series else 1
 
     mismatch_counter = Counter()
-    for result in results:
-        if not result.triggered_rules:
-            continue
+    rule_payloads = (
+        db.query(MatchingResult.triggered_rules)
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(BranchInput.archived_at.is_(None), MatchingResult.triggered_rules.is_not(None))
+        .all()
+    )
+    for (triggered_rules,) in rule_payloads:
         try:
-            rules = json.loads(result.triggered_rules or "[]")
+            rules = json.loads(triggered_rules or "[]")
         except json.JSONDecodeError:
             rules = []
         for rule in rules:
@@ -373,22 +421,29 @@ def _dashboard_summary(db: Session):
         {"label": label, "value": value}
         for label, value in mismatch_counter.most_common(8)
     ]
+    suspicious_results = (
+        db.query(MatchingResult)
+        .options(joinedload(MatchingResult.branch_input))
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(BranchInput.archived_at.is_(None), MatchingResult.risk_score > 7)
+        .order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc())
+        .limit(15)
+        .all()
+    )
 
     return {
-        "branch_inputs": branch_inputs,
-        "results": results,
-        "total_branch": len(branch_inputs),
+        "total_branch": total_branch,
         "total_matched": status_counter.get("MATCHED", 0),
         "total_need_review": status_counter.get("NEED REVIEW", 0),
         "total_unmatched": status_counter.get("UNMATCHED", 0),
-        "total_high_alert": risk_counter.get("High Alert", 0),
+        "total_high_alert": total_high_alert,
         "trend_labels": sorted_labels,
         "trend_branch": branch_series,
         "trend_max": trend_max,
         "indicator_rows": indicator_rows,
         "mismatch_labels": [row["label"] for row in indicator_rows],
         "mismatch_values": [row["value"] for row in indicator_rows],
-        "suspicious_results": [item for item in results if item.risk_score > 7][:15],
+        "suspicious_results": suspicious_results,
         "rule_config": RULE_CONFIG,
     }
 
@@ -480,13 +535,41 @@ def branch_inputs_page(
     imported: int = 0,
     failed: int = 0,
     msg: str = "",
+    page: int = 1,
+    per_page: int = 20,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).order_by(BranchInput.transaction_date.desc(), BranchInput.id.desc()).all()
+    page = max(1, page)
+    per_page = min(max(10, per_page), 100)
+    query = db.query(BranchInput).filter(BranchInput.archived_at.is_(None))
+    total_rows = query.count()
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    rows = (
+        query.order_by(BranchInput.transaction_date.desc(), BranchInput.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
     return templates.TemplateResponse(
         "branch_inputs.html",
-        {"request": request, "user": user, "rows": rows, "imported": imported, "failed": failed, "msg": msg},
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "imported": imported,
+            "failed": failed,
+            "msg": msg,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_rows": total_rows,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+            },
+        },
     )
 
 
