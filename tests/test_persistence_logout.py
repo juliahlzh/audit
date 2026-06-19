@@ -88,6 +88,15 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertIn("HOLD", alert_page.text)
         self.assertIn("Catatan persistensi", self.db.query(MatchingResult).first().follow_up_notes)
 
+    def test_login_page_does_not_expose_demo_credentials(self):
+        response = self.client.get("/login")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Akun demo", response.text)
+        self.assertNotIn("admin123", response.text)
+        self.assertNotIn("auditor123", response.text)
+        self.assertNotIn("viewer123", response.text)
+
     def test_report_is_grouped_by_location_without_customer_name(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
 
