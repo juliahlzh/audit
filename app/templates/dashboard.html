@@ -1,167 +1,108 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header">
-    <div>
-        <h2>Dashboard FEWS Approval</h2>
-        <p class="muted">Satu file Excel approval langsung dianalisis untuk mendeteksi indikasi kecurangan.</p>
-    </div>
-    <div class="page-actions">
-        <a class="secondary-button" href="/branch-inputs">Upload Data</a>
-        <a class="primary-link-button" href="/alerts">Buka Alert</a>
-    </div>
+<div class="page-header monitoring-header">
+    <div><h2>Dashboard Ranking Wilayah</h2><p class="muted">Prioritas risiko per periode berdasarkan SOP FEWS terbaru.</p></div>
 </div>
 
-<div class="workflow-strip">
-    <h3>Cara Pakai Singkat</h3>
-    <div class="guide-steps">
-        <span><strong>1</strong> Upload file Excel approval.</span>
-        <span><strong>2</strong> Sistem menjalankan tes indikator.</span>
-        <span><strong>3</strong> Auditor tindak lanjuti alert.</span>
+<form class="monitor-filter" method="get" action="/dashboard">
+    <div class="filter-field">
+        <label for="region">Wilayah</label>
+        <select id="region" name="region" {% if user.region %}disabled{% endif %}>
+            <option value="">Semua Wilayah</option>
+            {% for item in filter_options.regions %}<option value="{{ item }}" {% if filters.region == item or user.region == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+        </select>
+        {% if user.region %}<input type="hidden" name="region" value="{{ user.region }}">{% endif %}
     </div>
+    <div class="filter-field">
+        <label for="area">Area</label>
+        <select id="area" name="area"><option value="">Semua Area</option>{% for item in filter_options.areas %}<option value="{{ item }}" {% if filters.area == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+    </div>
+    <div class="filter-field">
+        <label for="location">Lokasi</label>
+        <select id="location" name="location">
+            <option value="">Semua Lokasi</option>
+            {% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="filter-field"><label for="month">Periode (bulan)</label><input id="month" type="month" name="month" value="{{ filters.month }}"></div>
+    <div class="filter-field">
+        <label for="indicator">Jenis Kesalahan</label>
+        <select id="indicator" name="indicator"><option value="">Semua Kesalahan</option>{% for item in filter_options.indicators %}<option value="{{ item.code }}" {% if filters.indicator == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select>
+    </div>
+    <div class="filter-field">
+        <label for="verification">Status Verifikasi</label>
+        <select id="verification" name="verification">
+            <option value="">Semua Status</option>
+            <option value="sudah" {% if filters.verification == 'sudah' %}selected{% endif %}>Sudah Diverifikasi</option>
+            <option value="belum" {% if filters.verification == 'belum' %}selected{% endif %}>Belum Diverifikasi</option>
+        </select>
+    </div>
+    <div class="filter-actions"><button type="submit">Terapkan</button><a href="/dashboard">Reset</a></div>
+</form>
+
+{% if database_warning %}<div class="alert red">{{ database_warning }}</div>{% endif %}
+
+<div class="monitor-kpis">
+    <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Sesuai filter aktif</small></div>
+    <div class="monitor-kpi warning"><span>Belum Diverifikasi</span><strong>{{ unverified }}</strong><small>{{ ((unverified / total * 100)|round(1)) if total else 0 }}% dari total</small></div>
+    <div class="monitor-kpi danger"><span>Risiko Tinggi</span><strong>{{ high }}</strong><small>Skor di atas 7</small></div>
+    <div class="monitor-kpi info"><span>Wilayah Terpantau</span><strong>{{ region_total }}</strong><small>Dalam hasil filter</small></div>
 </div>
 
-<div class="grid three">
-    <div class="metric-card">
-        <span>Total data approval</span>
-        <strong>{{ total_branch }}</strong>
-        <small>Data aktif yang dipantau</small>
-    </div>
-    <div class="metric-card warning">
-        <span>Perlu review</span>
-        <strong>{{ total_need_review }}</strong>
-        <small>Skor di atas 0</small>
-    </div>
-    <div class="metric-card danger">
-        <span>High alert</span>
-        <strong>{{ total_high_alert }}</strong>
-        <small>Prioritas investigasi</small>
-    </div>
-</div>
-
-{% if total_high_alert > 0 %}
-<div class="alert red">Terdapat {{ total_high_alert }} transaksi dengan skor risiko di atas 7 (prioritas investigasi).</div>
-{% endif %}
-
-{% if database_warning %}
-<div class="alert red">{{ database_warning }}</div>
-{% endif %}
-
-<div class="grid two">
-    <div class="panel">
-        <h3>Indikator Yang Dites</h3>
-        <div class="explain-list">
-            {% for code, rule in rule_config.rules.items() %}
-            <div class="explain-item">
-                <span>{{ loop.index }}</span>
-                <div><strong>{{ rule.name }}</strong><p>{{ rule.description }}</p></div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="panel">
-        <h3>Aturan Skor Risiko</h3>
-        <div class="score-box">
-            <p><strong>Skor per indikator:</strong></p>
-            {% for code, score in rule_config.score.items() %}
-            <p>{{ rule_config.rules[code].name }}: +{{ score }}</p>
-            {% endfor %}
-            <hr>
-            <p><strong>Kategori hasil:</strong></p>
-            <p>0: Normal (MATCHED)</p>
-            <p>1-{{ rule_config.risk_level.medium_max }}: Perlu Review (NEED REVIEW)</p>
-            <p>>{{ rule_config.risk_level.medium_max }}: High Alert (UNMATCHED)</p>
-        </div>
-    </div>
-</div>
-
-<div class="grid two dashboard-visuals">
-    <div class="panel dashboard-visual-card trend-card">
-        <div class="visual-heading">
-            <div>
-                <h3>Tren Approval Terbaru</h3>
-                <p class="muted">Ringkasan 10 tanggal terakhir agar cepat dibaca.</p>
-            </div>
-            <span class="visual-pill">Harian</span>
-        </div>
-        <div class="trend-strip">
-            {% for label in trend_labels %}
-            {% set b_value = trend_branch[loop.index0] %}
-            <div class="trend-pill">
-                <span>{{ label|date_id }}</span>
-                <strong>{{ b_value }}</strong>
-                <small>data</small>
-            </div>
-            {% else %}
-            <p>Belum ada data tren harian.</p>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="panel dashboard-visual-card indicator-card">
-        <div class="visual-heading">
-            <div>
-                <h3>Indikator Paling Sering</h3>
-                <p class="muted">Ditampilkan sebagai nama tes, bukan kalimat alasan panjang.</p>
-            </div>
-            <span class="visual-pill accent">Top 8</span>
-        </div>
-        <div class="indicator-grid">
-            {% set max_indicator = (mismatch_values|max) if mismatch_values else 1 %}
-            {% for item in indicator_rows %}
-            <div class="indicator-chip" title="{{ item.label }}">
-                <div class="indicator-chip-top">
-                    <strong>{{ item.label }}</strong>
-                    <span>{{ item.value }}</span>
-                </div>
-                <div class="chip-bar">
-                    <span style="width: {{ ((item.value / max_indicator) * 100) if max_indicator else 0 }}%;"></span>
-                </div>
-            </div>
-            {% else %}
-            <p>Belum ada indikator fraud terdeteksi.</p>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<div class="grid two">
-    <div class="panel">
-        <h3>Transaksi Prioritas Investigasi</h3>
-        <div class="table-wrap"><table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Status</th>
-                    <th>Skor</th>
-                    <th>Indikator</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in suspicious_results %}
-                <tr class="risk-{{ row.status|lower|replace(' ', '-') }}">
-                    <td>#{{ row.id }}</td>
-                    <td>{{ row.status }}</td>
-                    <td>{{ row.risk_score }} ({{ row.risk_level }})</td>
-                    <td>{{ row.mismatch_type }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4">Belum ada high alert.</td></tr>
-                {% endfor %}
-            </tbody>
+{% set displayed_region_rows = global_region_rows if user.region else region_rows %}
+<div class="monitor-grid monitor-grid-primary">
+    <section class="monitor-panel">
+        <div class="monitor-panel-heading"><div><h3>Tren Skor Kesalahan per Bulan</h3><p>Perbandingan enam bulan terakhir.</p></div></div>
+        <div id="trend-chart" class="line-chart" aria-label="Grafik garis tren skor kesalahan"></div>
+        <script type="application/json" id="trend-data">{{ trend|tojson }}</script>
+    </section>
+    <section class="monitor-panel">
+        <div class="monitor-panel-heading"><div><h3>Ranking Wilayah per Periode</h3><p>{{ 'Ranking nasional umum; detail tetap dibatasi ke wilayah akun.' if user.region else 'Diurutkan dari total skor terparah.' }}</p></div></div>
+        <div class="table-wrap"><table class="ranking-table">
+            <thead><tr><th>Rank</th><th>Wilayah</th><th>Temuan</th><th>Skor</th><th>Risiko</th></tr></thead>
+            <tbody>{% for row in displayed_region_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td>{{ row.score_total }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td></tr>{% else %}<tr><td colspan="5">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
         </table></div>
-    </div>
-    <div class="panel">
-        <h3>Aktivitas Sistem</h3>
-        <ul class="log-list">
-            {% for log in latest_alerts %}
-            <li>
-                <strong>{{ log.status }}</strong>
-                <span>{{ log.action }}</span>
-                <p>{{ log.notes }}</p>
-            </li>
-            {% else %}
-            <li>Belum ada alert.</li>
-            {% endfor %}
-        </ul>
-    </div>
+    </section>
 </div>
+
+<div class="monitor-grid monitor-grid-secondary">
+    <section class="monitor-panel">
+        <div class="monitor-panel-heading"><div><h3>Kesalahan Dominan</h3><p>Indikator yang paling sering terpicu.</p></div></div>
+        {% set max_indicator = indicator_rows[0].value if indicator_rows else 1 %}
+        <div class="dominant-list">
+            {% for item in indicator_rows %}<div class="dominant-row"><div><span>{{ item.name }}</span><strong>{{ item.value }}</strong></div><div class="dominant-track"><span style="width: {{ (item.value / max_indicator * 100)|round }}%"></span></div></div>{% else %}<p class="empty-copy">Belum ada kesalahan pada filter ini.</p>{% endfor %}
+        </div>
+    </section>
+    <section class="monitor-panel recent-panel">
+        <div class="monitor-panel-heading"><div><h3>Ringkasan Temuan Terbaru</h3><p>ID Unix, kesalahan, skor, dan status verifikasi.</p></div><a href="/reports">Lihat laporan →</a></div>
+        <div class="table-wrap"><table>
+            <thead><tr><th>ID Unix</th><th>Wilayah</th><th>Lokasi</th><th>Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
+            <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="6">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
+</div>
+
+<script>
+(() => {
+    const target = document.getElementById("trend-chart");
+    const data = JSON.parse(document.getElementById("trend-data").textContent || "{}");
+    const width = 760, height = 285, pad = {left: 42, right: 18, top: 18, bottom: 52};
+    const colors = ["#1677d2", "#009688", "#f59e0b", "#e5484d", "#7c5ce7", "#64748b"];
+    const values = (data.series || []).flatMap(item => item.values || []);
+    const max = Math.max(10, ...values);
+    const plotW = width - pad.left - pad.right, plotH = height - pad.top - pad.bottom;
+    const x = index => pad.left + (data.labels.length <= 1 ? 0 : index * plotW / (data.labels.length - 1));
+    const y = value => pad.top + plotH - (value / max * plotH);
+    const grid = [0, .25, .5, .75, 1].map(ratio => `<line x1="${pad.left}" y1="${pad.top + plotH * ratio}" x2="${width - pad.right}" y2="${pad.top + plotH * ratio}" class="chart-grid"/><text x="${pad.left - 9}" y="${pad.top + plotH * ratio + 4}" text-anchor="end" class="chart-axis">${Math.round(max * (1-ratio))}</text>`).join("");
+    const labels = (data.labels || []).map((label, index) => `<text x="${x(index)}" y="${height - 27}" text-anchor="middle" class="chart-axis">${label}</text>`).join("");
+    const lines = (data.series || []).map((series, seriesIndex) => {
+        const color = colors[seriesIndex % colors.length];
+        const points = series.values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
+        const dots = series.values.map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="white" stroke="${color}" stroke-width="2"/>`).join("");
+        return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+    }).join("");
+    const legend = (data.series || []).map((series, index) => `<span><i style="background:${colors[index % colors.length]}"></i>${series.name}</span>`).join("");
+    target.innerHTML = data.series?.length ? `<svg viewBox="0 0 ${width} ${height}" role="img">${grid}${labels}${lines}</svg><div class="chart-legend">${legend}</div>` : `<div class="chart-empty">Belum ada data tren untuk filter ini.</div>`;
+})();
+</script>
 {% endblock %}

@@ -27,9 +27,11 @@ from .dependencies import get_current_user, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
+from .services.analytics import build_global_region_ranking, build_monitoring_context, filter_options
 from .services.matching_engine import run_matching
+from .services.organization import ORGANIZATION_ROWS
 from .services.rule_config import RULE_CONFIG
-from .services.reports import build_excel_report, build_pdf_report, summarize_by_location
+from .services.reports import build_excel_report, build_pdf_report, build_ranked_excel_report, summarize_by_location
 from .services.system_status import get_database_warning, get_system_status
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -169,10 +171,23 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("branch_inputs", "archived_at", "DATETIME", "TIMESTAMP")
     _add_column_if_missing("branch_inputs", "correction_reason", "TEXT")
     _add_column_if_missing("branch_inputs", "correction_notes", "TEXT")
+    _add_column_if_missing("branch_inputs", "region", "VARCHAR(80) DEFAULT 'Belum Dipetakan'")
+    _add_column_if_missing("branch_inputs", "area", "VARCHAR(100) DEFAULT 'Belum Dipetakan'")
+    _add_column_if_missing("branch_inputs", "data_type", "VARCHAR(20) DEFAULT 'OPERASIONAL'")
+    _add_column_if_missing("users", "region", "VARCHAR(80)")
     _add_column_if_missing("matching_results", "triggered_rules", "TEXT")
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
     with engine.begin() as conn:
+        for region, area, location in ORGANIZATION_ROWS:
+            conn.execute(
+                text(
+                    "UPDATE branch_inputs SET region = :region, area = :area "
+                    "WHERE LOWER(TRIM(branch_name)) = LOWER(:location)"
+                ),
+                {"region": region, "area": area, "location": location.strip()},
+            )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_inputs_area ON branch_inputs (area)"))
         conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_branch_inputs_active_transaction "
@@ -516,13 +531,37 @@ def logout(request: Request):
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    data = _dashboard_summary(db)
+def dashboard(
+    request: Request,
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    month: str = "",
+    indicator: str = "",
+    verification: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    filters = {
+        "region": region,
+        "area": area,
+        "location": location,
+        "month": month,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    data = build_monitoring_context(db, user, filters)
+    data["global_region_rows"] = build_global_region_ranking(db, user, filters)
+    old_summary = {
+        "total_branch": data["total"],
+        "total_need_review": data["need_review"],
+        "total_high_alert": data["high"],
+    }
     context = {
         "request": request,
         "user": user,
         **data,
-        "latest_alerts": db.query(AuditLog).filter(AuditLog.status.in_(["WARNING", "ALERT"])).order_by(AuditLog.created_at.desc()).limit(12).all(),
+        "old_summary": old_summary,
         "system_status": get_system_status(),
         "database_warning": get_database_warning(),
     }
@@ -540,6 +579,7 @@ def branch_inputs_page(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    return RedirectResponse("/reports", status_code=303)
     page = max(1, page)
     per_page = min(max(10, per_page), 100)
     query = db.query(BranchInput).filter(BranchInput.archived_at.is_(None))
@@ -599,6 +639,7 @@ def create_branch_input(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "auditor")),
 ):
+    return Response(status_code=410, content="Manual input sudah dinonaktifkan. Gunakan integrasi data terkontrol.")
     row = BranchInput(
         transaction_date=datetime.strptime(transaction_date, "%Y-%m-%d").date(),
         branch_name=branch_name,
@@ -663,6 +704,7 @@ def upload_branch_input_excel(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "auditor")),
 ):
+    return Response(status_code=410, content="Upload Excel melalui UI sudah dinonaktifkan.")
     try:
         df = _read_upload_dataframe(excel_file)
     except Exception:
@@ -847,6 +889,8 @@ def alert_center(
     status: str = "",
     follow_up_status: str = "",
     min_score: int = 0,
+    region: str = "",
+    area: str = "",
     branch: str = "",
     officer: str = "",
     indicator: str = "",
@@ -865,6 +909,12 @@ def alert_center(
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
         .filter(BranchInput.archived_at.is_(None))
     )
+    if user.region:
+        query = query.filter(BranchInput.region == user.region)
+    elif region:
+        query = query.filter(BranchInput.region == region)
+    if area:
+        query = query.filter(BranchInput.area == area)
     if status:
         query = query.filter(MatchingResult.status == status)
     if follow_up_status:
@@ -910,8 +960,11 @@ def alert_center(
                 "has_prev": page > 1,
                 "has_next": page < total_pages,
             },
+            "filter_options": filter_options(db, user, region, area),
             "filters": {
                 "status": status,
+                "region": region,
+                "area": area,
                 "follow_up_status": follow_up_status,
                 "min_score": min_score,
                 "branch": branch,
@@ -970,23 +1023,72 @@ def transactions_new_redirect():
 
 @app.get("/logs", response_class=HTMLResponse)
 def audit_logs(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
-    return templates.TemplateResponse("logs.html", {"request": request, "user": user, "logs": logs})
+    return RedirectResponse("/reports", status_code=303)
 
 
 @app.get("/reports", response_class=HTMLResponse)
 def reports_page(
     request: Request,
-    period: str = "harian",
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    month: str = "",
+    indicator: str = "",
+    verification: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    summary = _build_periodic_summary(db, period=period)
-    return templates.TemplateResponse("reports.html", {"request": request, "user": user, **summary})
+    filters = {
+        "region": region,
+        "area": area,
+        "location": location,
+        "month": month,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    summary = build_monitoring_context(db, user, filters)
+    old_summary = {
+        "total_branch": summary["total"],
+        "total_need_review": summary["need_review"],
+        "total_high_alert": summary["high"],
+    }
+    return templates.TemplateResponse(
+        "reports.html",
+        {"request": request, "user": user, **summary, "old_summary": old_summary},
+    )
+
+
+@app.post("/reports/{result_id}/verify")
+def verify_report_result(
+    result_id: int,
+    notes: str = Form("Verifikasi selesai melalui laporan FEWS."),
+    return_to: str = Form("/reports"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role not in {"admin", "auditor"}:
+        return Response(status_code=403, content="Akun wilayah bersifat read-only.")
+    query = (
+        db.query(MatchingResult)
+        .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+        .filter(MatchingResult.id == result_id, BranchInput.archived_at.is_(None))
+    )
+    if user.region:
+        query = query.filter(BranchInput.region == user.region)
+    row = query.first()
+    if not row:
+        return Response(status_code=404, content="Temuan tidak ditemukan atau di luar wilayah akses.")
+    row.follow_up_status = "RESOLVED"
+    row.follow_up_notes = notes.strip() or "Verifikasi selesai melalui laporan FEWS."
+    db.commit()
+    add_log(db, "Verifikasi temuan", f"Hasil #{result_id} ditandai sudah diverifikasi.", user_id=user.id)
+    safe_return = return_to if return_to.startswith("/reports") and not return_to.startswith("//") else "/reports"
+    return RedirectResponse(safe_return, status_code=303)
 
 
 @app.get("/templates/approval-import.xlsx")
 def download_template(user: User = Depends(get_current_user)):
+    return Response(status_code=410, content="Template upload UI sudah dinonaktifkan.")
     import pandas as pd
 
     columns = [
@@ -1055,10 +1157,27 @@ def download_template(user: User = Depends(get_current_user)):
 
 
 @app.get("/reports/excel")
-def export_excel(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = db.query(MatchingResult).options(joinedload(MatchingResult.branch_input)).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
-    data = build_excel_report(rows)
-    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=fews_dana_masuk_report.xlsx"})
+def export_excel(
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    month: str = "",
+    indicator: str = "",
+    verification: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    filters = {
+        "region": region,
+        "area": area,
+        "location": location,
+        "month": month,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    context = build_monitoring_context(db, user, filters)
+    data = build_ranked_excel_report(context["location_rows"], filters)
+    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=fews_ranking_lokasi.xlsx"})
 
 
 @app.get("/reports/pdf")
