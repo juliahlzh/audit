@@ -37,6 +37,26 @@ def _month_bounds(month: str | None) -> tuple[date | None, date | None]:
     return start, next_month
 
 
+def _week_bounds(week: str | None) -> tuple[date | None, date | None]:
+    if not week:
+        return None, None
+    try:
+        start = datetime.strptime(f"{week}-1", "%G-W%V-%u").date()
+    except ValueError:
+        return None, None
+    return start, start + timedelta(days=7)
+
+
+def _period_bounds(
+    period_type: str | None,
+    month: str | None,
+    week: str | None,
+) -> tuple[date | None, date | None]:
+    if (period_type or "bulanan") == "mingguan":
+        return _week_bounds(week)
+    return _month_bounds(month)
+
+
 def _base_query(db: Session, user: User, enforce_user_scope: bool = True):
     query = (
         db.query(MatchingResult)
@@ -56,7 +76,9 @@ def filtered_results(
     region: str = "",
     area: str = "",
     location: str = "",
+    period_type: str = "bulanan",
     month: str = "",
+    week: str = "",
     indicator: str = "",
     verification: str = "",
     apply_month: bool = True,
@@ -76,7 +98,7 @@ def filtered_results(
     elif verification == "belum":
         query = query.filter(MatchingResult.follow_up_status != "RESOLVED")
     if apply_month:
-        start, end = _month_bounds(month)
+        start, end = _period_bounds(period_type, month, week)
         if start and end:
             query = query.filter(BranchInput.transaction_date >= start, BranchInput.transaction_date < end)
     return query.order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
@@ -155,29 +177,55 @@ def _shift_month(value: date, offset: int) -> date:
     return date(absolute // 12, absolute % 12 + 1, 1)
 
 
-def build_trend(results, month: str = ""):
-    start, _ = _month_bounds(month)
+def build_trend(results, period_type: str = "bulanan", month: str = "", week: str = ""):
+    period_type = "mingguan" if period_type == "mingguan" else "bulanan"
+    start, _ = _period_bounds(period_type, month, week)
     dated = [row for row in results if row.branch_input and row.branch_input.transaction_date]
-    if start:
-        end_month = start
-    elif dated:
-        latest = max(row.branch_input.transaction_date for row in dated)
-        end_month = latest.replace(day=1)
+    latest = max((row.branch_input.transaction_date for row in dated), default=date.today())
+
+    if period_type == "mingguan":
+        end_period = start or (latest - timedelta(days=latest.weekday()))
+        periods = [end_period + timedelta(weeks=offset) for offset in range(-5, 1)]
+        keys = {item.strftime("%G-W%V"): index for index, item in enumerate(periods)}
+        labels = [f"M{item.isocalendar().week} {item.isocalendar().year}" for item in periods]
+        key_for_date = lambda value: value.strftime("%G-W%V")
     else:
-        end_month = date.today().replace(day=1)
-    months = [_shift_month(end_month, offset) for offset in range(-5, 1)]
-    month_keys = {item.strftime("%Y-%m"): index for index, item in enumerate(months)}
-    region_values = defaultdict(lambda: [0] * len(months))
+        end_period = start or latest.replace(day=1)
+        periods = [_shift_month(end_period, offset) for offset in range(-5, 1)]
+        keys = {item.strftime("%Y-%m"): index for index, item in enumerate(periods)}
+        labels = [f"{MONTH_NAMES_ID[item.month - 1]} {item.year}" for item in periods]
+        key_for_date = lambda value: value.strftime("%Y-%m")
+
+    values = [0] * len(periods)
     for result in dated:
-        key = result.branch_input.transaction_date.strftime("%Y-%m")
-        if key in month_keys:
-            region_values[result.branch_input.region][month_keys[key]] += result.risk_score or 0
+        key = key_for_date(result.branch_input.transaction_date)
+        if key in keys:
+            values[keys[key]] += result.risk_score or 0
+
+    previous = values[-2] if len(values) > 1 else 0
+    current = values[-1] if values else 0
+    delta = current - previous
+    if delta > 0:
+        direction = "naik"
+        recommendation = "Prioritaskan verifikasi lokasi dan indikator penyumbang skor terbesar."
+    elif delta < 0:
+        direction = "turun"
+        recommendation = "Pertahankan tindak lanjut dan periksa apakah penurunan konsisten pada periode berikutnya."
+    else:
+        direction = "stabil"
+        recommendation = "Lanjutkan pemantauan dan verifikasi temuan yang masih terbuka."
+    comparison = f"{abs(delta)} poin" if previous == 0 else f"{abs(delta / previous * 100):.1f}%"
     return {
-        "labels": [f"{MONTH_NAMES_ID[item.month - 1]} {item.year}" for item in months],
-        "series": [
-            {"name": region, "values": values}
-            for region, values in sorted(region_values.items())
-        ],
+        "period_type": period_type,
+        "labels": labels,
+        "series": [{"name": "Total skor", "values": values}],
+        "analysis": {
+            "direction": direction,
+            "headline": f"Skor {direction} {comparison} dari periode sebelumnya",
+            "recommendation": recommendation,
+            "current": current,
+            "previous": previous,
+        },
     }
 
 
@@ -227,8 +275,22 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
     region_rows = summarize_rankings(scoped, "region")
     location_rows = summarize_rankings(scoped, "location")
     indicator_counts = Counter()
+    indicator_scores = Counter()
     for result in scoped:
-        indicator_counts.update(_rule_names(result))
+        names = _rule_names(result)
+        indicator_counts.update(names)
+        for name in names:
+            indicator_scores[name] += result.risk_score or 0
+    indicator_rows = [
+        {"name": name, "value": count, "score": indicator_scores[name]}
+        for name, count in indicator_counts.most_common()
+    ]
+    trend = build_trend(
+        trend_scope,
+        filters.get("period_type", "bulanan"),
+        filters.get("month", ""),
+        filters.get("week", ""),
+    )
     return {
         "filters": filters,
         "filter_options": filter_options(db, user, filters.get("region", ""), filters.get("area", "")),
@@ -239,11 +301,17 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         "region_total": len(region_rows),
         "region_rows": region_rows,
         "location_rows": location_rows,
-        "trend": build_trend(trend_scope, filters.get("month", "")),
-        "indicator_rows": [
-            {"name": name, "value": value} for name, value in indicator_counts.most_common(6)
+        "top_location_rows": location_rows[:10],
+        "bottom_location_rows": list(reversed(location_rows[-10:])),
+        "location_chart_rows": [
+            {"name": row["name"], "score_total": row["score_total"], "total": row["total"]}
+            for row in location_rows[:10]
         ],
-        "recent_rows": scoped[:12],
+        "trend": trend,
+        "trend_analysis": trend["analysis"],
+        "indicator_rows": indicator_rows[:10],
+        "detail_rows": scoped,
+        "recent_rows": scoped[:20],
     }
 
 def build_global_region_ranking(db: Session, user: User, filters: dict):

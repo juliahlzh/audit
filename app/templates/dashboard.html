@@ -4,105 +4,35 @@
     <div><h2>Dashboard Ranking Wilayah</h2><p class="muted">Prioritas risiko per periode berdasarkan SOP FEWS terbaru.</p></div>
 </div>
 
-<form class="monitor-filter" method="get" action="/dashboard">
-    <div class="filter-field">
-        <label for="region">Wilayah</label>
-        <select id="region" name="region" {% if user.region %}disabled{% endif %}>
-            <option value="">Semua Wilayah</option>
-            {% for item in filter_options.regions %}<option value="{{ item }}" {% if filters.region == item or user.region == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
-        </select>
-        {% if user.region %}<input type="hidden" name="region" value="{{ user.region }}">{% endif %}
-    </div>
-    <div class="filter-field">
-        <label for="area">Area</label>
-        <select id="area" name="area"><option value="">Semua Area</option>{% for item in filter_options.areas %}<option value="{{ item }}" {% if filters.area == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
-    </div>
-    <div class="filter-field">
-        <label for="location">Lokasi</label>
-        <select id="location" name="location">
-            <option value="">Semua Lokasi</option>
-            {% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
-        </select>
-    </div>
-    <div class="filter-field"><label for="month">Periode (bulan)</label><input id="month" type="month" name="month" value="{{ filters.month }}"></div>
-    <div class="filter-field">
-        <label for="indicator">Jenis Kesalahan</label>
-        <select id="indicator" name="indicator"><option value="">Semua Kesalahan</option>{% for item in filter_options.indicators %}<option value="{{ item.code }}" {% if filters.indicator == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select>
-    </div>
-    <div class="filter-field">
-        <label for="verification">Status Verifikasi</label>
-        <select id="verification" name="verification">
-            <option value="">Semua Status</option>
-            <option value="sudah" {% if filters.verification == 'sudah' %}selected{% endif %}>Sudah Diverifikasi</option>
-            <option value="belum" {% if filters.verification == 'belum' %}selected{% endif %}>Belum Diverifikasi</option>
-        </select>
-    </div>
-    <div class="filter-actions"><button type="submit">Terapkan</button><a href="/dashboard">Reset</a></div>
-</form>
-
-{% if database_warning %}<div class="alert red">{{ database_warning }}</div>{% endif %}
+{% set filter_action = '/dashboard' %}
+{% include '_monitoring_filters.html' %}
 
 <div class="monitor-kpis">
-    <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Sesuai filter aktif</small></div>
+    <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Dalam hasil filter</small></div>
     <div class="monitor-kpi warning"><span>Belum Diverifikasi</span><strong>{{ unverified }}</strong><small>{{ ((unverified / total * 100)|round(1)) if total else 0 }}% dari total</small></div>
     <div class="monitor-kpi danger"><span>Risiko Tinggi</span><strong>{{ high }}</strong><small>Skor di atas 7</small></div>
-    <div class="monitor-kpi info"><span>Wilayah Terpantau</span><strong>{{ region_total }}</strong><small>Dalam hasil filter</small></div>
+    <div class="monitor-kpi info"><span>Lokasi Terpantau</span><strong>{{ location_rows|length }}</strong><small>Pada periode aktif</small></div>
 </div>
 
 {% set displayed_region_rows = global_region_rows if user.region else region_rows %}
-<div class="monitor-grid monitor-grid-primary">
-    <section class="monitor-panel">
-        <div class="monitor-panel-heading"><div><h3>Tren Skor Kesalahan per Bulan</h3><p>Perbandingan enam bulan terakhir.</p></div></div>
-        <div id="trend-chart" class="line-chart" aria-label="Grafik garis tren skor kesalahan"></div>
-        <script type="application/json" id="trend-data">{{ trend|tojson }}</script>
-    </section>
-    <section class="monitor-panel">
-        <div class="monitor-panel-heading"><div><h3>Ranking Wilayah per Periode</h3><p>{{ 'Ranking nasional umum; detail tetap dibatasi ke wilayah akun.' if user.region else 'Diurutkan dari total skor terparah.' }}</p></div></div>
-        <div class="table-wrap"><table class="ranking-table">
-            <thead><tr><th>Rank</th><th>Wilayah</th><th>Temuan</th><th>Skor</th><th>Risiko</th></tr></thead>
-            <tbody>{% for row in displayed_region_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td>{{ row.score_total }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td></tr>{% else %}<tr><td colspan="5">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
-        </table></div>
-    </section>
-</div>
+<section class="monitor-panel national-ranking-panel">
+    <div class="monitor-panel-heading"><div><h3>Ranking Wilayah per Periode</h3><p>{{ 'Ranking nasional umum; detail tetap dibatasi ke wilayah akun.' if user.region else 'Diurutkan dari total skor terparah.' }}</p></div></div>
+    <div class="table-wrap"><table class="ranking-table">
+        <thead><tr><th>Rank</th><th>Wilayah</th><th>Temuan</th><th>Total Skor</th><th>Skor Max</th><th>Risiko</th><th>Sudah</th><th>Belum</th></tr></thead>
+        <tbody>{% for row in displayed_region_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td><strong>{{ row.score_total }}</strong></td><td>{{ row.max_score }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>{{ row.verified }}</td><td>{{ row.unverified }}</td></tr>{% else %}<tr><td colspan="8">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
+    </table></div>
+</section>
 
-<div class="monitor-grid monitor-grid-secondary">
-    <section class="monitor-panel">
-        <div class="monitor-panel-heading"><div><h3>Kesalahan Dominan</h3><p>Indikator yang paling sering terpicu.</p></div></div>
-        {% set max_indicator = indicator_rows[0].value if indicator_rows else 1 %}
-        <div class="dominant-list">
-            {% for item in indicator_rows %}<div class="dominant-row"><div><span>{{ item.name }}</span><strong>{{ item.value }}</strong></div><div class="dominant-track"><span style="width: {{ (item.value / max_indicator * 100)|round }}%"></span></div></div>{% else %}<p class="empty-copy">Belum ada kesalahan pada filter ini.</p>{% endfor %}
-        </div>
-    </section>
-    <section class="monitor-panel recent-panel">
-        <div class="monitor-panel-heading"><div><h3>Ringkasan Temuan Terbaru</h3><p>ID Unix, kesalahan, skor, dan status verifikasi.</p></div><a href="/reports">Lihat laporan →</a></div>
-        <div class="table-wrap"><table>
-            <thead><tr><th>ID Unix</th><th>Wilayah</th><th>Lokasi</th><th>Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
-            <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="6">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
-        </table></div>
-    </section>
-</div>
+{% set chart_prefix = 'dashboard' %}
+{% include '_monitoring_visuals.html' %}
+{% include '_ranking_tables.html' %}
 
-<script>
-(() => {
-    const target = document.getElementById("trend-chart");
-    const data = JSON.parse(document.getElementById("trend-data").textContent || "{}");
-    const width = 760, height = 285, pad = {left: 42, right: 18, top: 18, bottom: 52};
-    const colors = ["#1677d2", "#009688", "#f59e0b", "#e5484d", "#7c5ce7", "#64748b"];
-    const values = (data.series || []).flatMap(item => item.values || []);
-    const max = Math.max(10, ...values);
-    const plotW = width - pad.left - pad.right, plotH = height - pad.top - pad.bottom;
-    const x = index => pad.left + (data.labels.length <= 1 ? 0 : index * plotW / (data.labels.length - 1));
-    const y = value => pad.top + plotH - (value / max * plotH);
-    const grid = [0, .25, .5, .75, 1].map(ratio => `<line x1="${pad.left}" y1="${pad.top + plotH * ratio}" x2="${width - pad.right}" y2="${pad.top + plotH * ratio}" class="chart-grid"/><text x="${pad.left - 9}" y="${pad.top + plotH * ratio + 4}" text-anchor="end" class="chart-axis">${Math.round(max * (1-ratio))}</text>`).join("");
-    const labels = (data.labels || []).map((label, index) => `<text x="${x(index)}" y="${height - 27}" text-anchor="middle" class="chart-axis">${label}</text>`).join("");
-    const lines = (data.series || []).map((series, seriesIndex) => {
-        const color = colors[seriesIndex % colors.length];
-        const points = series.values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
-        const dots = series.values.map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="white" stroke="${color}" stroke-width="2"/>`).join("");
-        return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
-    }).join("");
-    const legend = (data.series || []).map((series, index) => `<span><i style="background:${colors[index % colors.length]}"></i>${series.name}</span>`).join("");
-    target.innerHTML = data.series?.length ? `<svg viewBox="0 0 ${width} ${height}" role="img">${grid}${labels}${lines}</svg><div class="chart-legend">${legend}</div>` : `<div class="chart-empty">Belum ada data tren untuk filter ini.</div>`;
-})();
-</script>
+<section class="monitor-panel finding-table-panel">
+    <div class="monitor-panel-heading"><div><h3>Detail Temuan FEWS</h3><p>ID Unix, kesalahan, jumlah kesalahan, skor, dan status verifikasi.</p></div><a href="/reports">Buka laporan</a></div>
+    <div class="table-wrap"><table class="wide-table detail-fews-table">
+        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
+        <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="9">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if total > recent_rows|length %}<p class="table-note">Menampilkan {{ recent_rows|length }} temuan terbaru. Seluruh detail tersedia pada menu Laporan dan export wilayah.</p>{% endif %}
+</section>
 {% endblock %}

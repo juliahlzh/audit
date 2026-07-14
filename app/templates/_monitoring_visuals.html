@@ -1,0 +1,59 @@
+<section class="monitor-panel trend-panel">
+    <div class="monitor-panel-heading"><div><h3>Perbandingan Skor per Periode</h3><p>Enam periode {{ 'mingguan' if filters.period_type == 'mingguan' else 'bulanan' }} terakhir sesuai filter aktif.</p></div></div>
+    <div id="{{ chart_prefix }}-trend-chart" class="line-chart" aria-label="Grafik garis perbandingan skor per periode"></div>
+    <div class="trend-analysis trend-{{ trend_analysis.direction }}">
+        <strong>{{ trend_analysis.headline }}</strong>
+        <span>{{ trend_analysis.recommendation }}</span>
+    </div>
+</section>
+
+<div class="monitor-grid chart-pair-grid">
+    <section class="monitor-panel">
+        <div class="monitor-panel-heading"><div><h3>Grafik per Indikator</h3><p>Jumlah kesalahan untuk setiap indikator utama.</p></div></div>
+        <div id="{{ chart_prefix }}-indicator-chart" class="bar-chart" role="img" aria-label="Grafik jumlah kesalahan per indikator"></div>
+    </section>
+    <section class="monitor-panel">
+        <div class="monitor-panel-heading"><div><h3>Grafik per Lokasi</h3><p>Total skor 10 lokasi dengan risiko terparah.</p></div></div>
+        <div id="{{ chart_prefix }}-location-chart" class="bar-chart" role="img" aria-label="Grafik total skor per lokasi"></div>
+    </section>
+</div>
+
+<script type="application/json" id="{{ chart_prefix }}-trend-data">{{ trend|tojson }}</script>
+<script type="application/json" id="{{ chart_prefix }}-indicator-data">{{ indicator_rows|tojson }}</script>
+<script type="application/json" id="{{ chart_prefix }}-location-data">{{ location_chart_rows|tojson }}</script>
+<script>
+(() => {
+    const prefix = {{ chart_prefix|tojson }};
+    const read = name => JSON.parse(document.getElementById(`${prefix}-${name}-data`).textContent || "[]");
+    const escapeText = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+
+    const trendTarget = document.getElementById(`${prefix}-trend-chart`);
+    const trendData = read("trend");
+    const width = 760, height = 285, pad = {left: 46, right: 20, top: 20, bottom: 48};
+    const values = trendData.series?.[0]?.values || [];
+    const max = Math.max(10, ...values);
+    const plotW = width - pad.left - pad.right, plotH = height - pad.top - pad.bottom;
+    const x = index => pad.left + (trendData.labels.length <= 1 ? 0 : index * plotW / (trendData.labels.length - 1));
+    const y = value => pad.top + plotH - (value / max * plotH);
+    const grid = [0, .25, .5, .75, 1].map(ratio => `<line x1="${pad.left}" y1="${pad.top + plotH * ratio}" x2="${width - pad.right}" y2="${pad.top + plotH * ratio}" class="chart-grid"/><text x="${pad.left - 9}" y="${pad.top + plotH * ratio + 4}" text-anchor="end" class="chart-axis">${Math.round(max * (1-ratio))}</text>`).join("");
+    const labels = (trendData.labels || []).map((label, index) => `<text x="${x(index)}" y="${height - 22}" text-anchor="middle" class="chart-axis">${escapeText(label)}</text>`).join("");
+    const points = values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
+    const dots = values.map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"><title>${escapeText(trendData.labels[index])}: ${value}</title></circle>`).join("");
+    trendTarget.innerHTML = values.length ? `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Total skor per periode">${grid}${labels}<polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>` : `<div class="chart-empty">Belum ada data tren untuk filter ini.</div>`;
+
+    const renderBars = (targetName, rows, valueKey, labelKey, color) => {
+        const target = document.getElementById(`${prefix}-${targetName}-chart`);
+        if (!rows.length) {
+            target.innerHTML = `<div class="chart-empty">Belum ada data untuk filter ini.</div>`;
+            return;
+        }
+        const maxValue = Math.max(1, ...rows.map(row => Number(row[valueKey]) || 0));
+        target.innerHTML = `<div class="bar-list">${rows.map(row => {
+            const value = Number(row[valueKey]) || 0;
+            return `<div class="bar-row"><div class="bar-label"><span>${escapeText(row[labelKey])}</span><strong>${value}</strong></div><div class="bar-track"><span style="width:${Math.max(2, value / maxValue * 100)}%;background:${color}"></span></div></div>`;
+        }).join("")}</div>`;
+    };
+    renderBars("indicator", read("indicator"), "value", "name", "var(--accent)");
+    renderBars("location", read("location"), "score_total", "name", "var(--danger)");
+})();
+</script>

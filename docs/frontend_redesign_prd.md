@@ -33,7 +33,9 @@ Dashboard dan Laporan memakai filter konsisten:
 - wilayah;
 - area;
 - lokasi;
-- periode bulanan;
+- jenis periode (`bulanan` atau `mingguan`);
+- bulan (`YYYY-MM`) saat periode bulanan aktif;
+- minggu ISO (`YYYY-Www`) saat periode mingguan aktif;
 - jenis kesalahan/indikator;
 - status verifikasi (`Sudah Diverifikasi` atau `Belum Diverifikasi`).
 
@@ -54,9 +56,10 @@ Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanj
 Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas input maksimal H+2 hari kerja dari tanggal bank dan warning merah setelah lebih dari H+10. Layout memuat:
 
 - tabel ID Unix, kesalahan, jumlah kesalahan, dan skor;
-- grafik per indikator dan lokasi;
-- grafik garis perbandingan bulanan;
+- grafik batang per indikator dan per lokasi;
+- grafik garis perbandingan enam periode bulanan atau mingguan beserta analisis perubahan periode terakhir;
 - ranking wilayah/lokasi per periode;
+- dua tabel ranking lokasi yang eksplisit: 10 risiko terparah dan 10 risiko terendah;
 - akses detail berbasis wilayah.
 
 ## Data pengujian
@@ -68,7 +71,7 @@ Loader harus idempoten, memetakan area dari master lokasi, dan tidak otomatis me
 
 ## Ekspor
 
-Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Excel berbentuk tabel, memiliki autofilter/freeze pane, memuat Wilayah–Area–Lokasi, serta diurutkan dari risiko terparah hingga terendah.
+Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Keduanya memuat konteks periode, ringkasan, grafik tren, grafik indikator, grafik lokasi, ranking 10 risiko terparah dan 10 risiko terendah, serta tabel detail ID Unix–kesalahan–jumlah–skor. Excel memakai tabel terstruktur, autofilter, freeze pane, dan chart Excel yang dapat diedit. PDF memakai grafik vektor dan tabel yang dapat berlanjut ke halaman berikutnya.
 
 ## Kriteria penerimaan
 
@@ -80,7 +83,9 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Admin melihat Dashboard/Info/Laporan pada navigasi; akun wilayah juga melihat Alert Center.
 - Tidak ada tombol/form upload atau manual input pada UI.
 - Filter area memengaruhi data secara nyata.
-- Grafik garis, ranking, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
+- Grafik garis, grafik indikator/lokasi, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Informasi yang tampil pada Dashboard dan Laporan mempunyai padanan data pada PDF dan Excel untuk filter wilayah yang sama.
 - Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
 
 ## Batasan

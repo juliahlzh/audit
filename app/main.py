@@ -542,7 +542,9 @@ def dashboard(
     region: str = "",
     area: str = "",
     location: str = "",
+    period_type: str = "bulanan",
     month: str = "",
+    week: str = "",
     indicator: str = "",
     verification: str = "",
     db: Session = Depends(get_db),
@@ -552,7 +554,9 @@ def dashboard(
         "region": region,
         "area": area,
         "location": location,
+        "period_type": period_type,
         "month": month,
+        "week": week,
         "indicator": indicator,
         "verification": verification,
     }
@@ -1055,7 +1059,9 @@ def reports_page(
     region: str = "",
     area: str = "",
     location: str = "",
+    period_type: str = "bulanan",
     month: str = "",
+    week: str = "",
     indicator: str = "",
     verification: str = "",
     db: Session = Depends(get_db),
@@ -1065,7 +1071,9 @@ def reports_page(
         "region": region,
         "area": area,
         "location": location,
+        "period_type": period_type,
         "month": month,
+        "week": week,
         "indicator": indicator,
         "verification": verification,
     }
@@ -1179,7 +1187,9 @@ def export_excel(
     region: str = "",
     area: str = "",
     location: str = "",
+    period_type: str = "bulanan",
     month: str = "",
+    week: str = "",
     indicator: str = "",
     verification: str = "",
     db: Session = Depends(get_db),
@@ -1192,12 +1202,20 @@ def export_excel(
         "region": effective_region,
         "area": area,
         "location": location,
+        "period_type": period_type,
         "month": month,
+        "week": week,
         "indicator": indicator,
         "verification": verification,
     }
     context = build_monitoring_context(db, user, filters)
-    data = build_ranked_excel_report(context["location_rows"], filters)
+    data = build_ranked_excel_report(
+        context["location_rows"],
+        filters,
+        detail_rows=context["detail_rows"],
+        trend=context["trend"],
+        indicator_rows=context["indicator_rows"],
+    )
     region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_ranking_lokasi.xlsx"})
 
@@ -1207,7 +1225,9 @@ def export_pdf(
     region: str = "",
     area: str = "",
     location: str = "",
+    period_type: str = "bulanan",
     month: str = "",
+    week: str = "",
     indicator: str = "",
     verification: str = "",
     db: Session = Depends(get_db),
@@ -1220,11 +1240,20 @@ def export_pdf(
         "region": effective_region,
         "area": area,
         "location": location,
+        "period_type": period_type,
         "month": month,
+        "week": week,
         "indicator": indicator,
         "verification": verification,
     }
-    rows = filtered_results(db, user, **filters)
-    data = build_pdf_report(rows, effective_region)
+    context = build_monitoring_context(db, user, filters)
+    data = build_pdf_report(
+        context["detail_rows"],
+        effective_region,
+        filters=filters,
+        trend=context["trend"],
+        indicator_rows=context["indicator_rows"],
+        location_rows=context["location_rows"],
+    )
     region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_laporan.pdf"})

@@ -56,9 +56,9 @@ class MonitoringFeatureTests(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
-    def _add_result(self, *, region, location, invoice, score, follow_up, code, name):
+    def _add_result(self, *, region, location, invoice, score, follow_up, code, name, transaction_date=None):
         branch = BranchInput(
-            transaction_date=date(2026, 6, 10), region=region, area=f"Area {location}", branch_name=location,
+            transaction_date=transaction_date or date(2026, 6, 10), region=region, area=f"Area {location}", branch_name=location,
             customer_name="DATA SINTETIS", amount_should_pay=1_000_000,
             amount_input_branch=900_000, payment_method="transfer", invoice_code=invoice,
             data_type="UJI",
@@ -151,6 +151,30 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertNotIn("JTG-1", response.text)
         self.assertIn("Sudah Diverifikasi", response.text)
 
+    def test_weekly_period_filters_dashboard_and_shows_complete_fews_sections(self):
+        self._add_result(
+            region="Jawa Barat", location="Bogor", invoice="JBR-W25", score=8,
+            follow_up="OPEN", code="amount_mismatch", name="Jumlah biaya tidak sesuai jumlah setor",
+            transaction_date=date(2026, 6, 17),
+        )
+        self.db.commit()
+        self._login("admin2")
+
+        response = self.client.get(
+            "/dashboard?region=Jawa%20Barat&period_type=mingguan&week=2026-W24"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("JBR-1", response.text)
+        self.assertNotIn("JBR-W25", response.text)
+        for heading in [
+            "Perbandingan Skor per Periode", "Grafik per Indikator", "Grafik per Lokasi",
+            "10 Risiko Terparah", "10 Risiko Terendah", "Detail Temuan FEWS",
+        ]:
+            self.assertIn(heading, response.text)
+        self.assertIn('value="mingguan" selected', response.text)
+        self.assertIn('value="2026-W24"', response.text)
+
     def test_area_filter_limits_results(self):
         self._login("admin2")
         response = self.client.get("/dashboard?area=Area%20Bandung&month=2026-06")
@@ -180,6 +204,27 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(sheet["D6"].value, "Bandung")
         self.assertEqual(sheet["D7"].value, "Semarang")
         self.assertEqual(sheet.tables["RankingLokasiFEWS"].ref, "A5:N7")
+
+        complete_payload = build_ranked_excel_report(
+            context["location_rows"], context["filters"], detail_rows=context["detail_rows"],
+            trend=context["trend"], indicator_rows=context["indicator_rows"],
+        )
+        workbook = load_workbook(BytesIO(complete_payload))
+        self.assertEqual(
+            workbook.sheetnames,
+            ["Ranking Lokasi", "10 Terparah", "10 Terendah", "Detail Temuan", "Tren Periode", "Grafik Indikator", "Grafik Lokasi"],
+        )
+        self.assertEqual(workbook["Detail Temuan"]["A1"].value, "ID Unix")
+        self.assertEqual(workbook["Detail Temuan"]["G1"].value, "Jumlah Kesalahan")
+        self.assertIsNone(workbook["Ranking Lokasi"].auto_filter.ref)
+        self.assertIsNone(workbook["10 Terparah"].auto_filter.ref)
+        self.assertIsNone(workbook["Detail Temuan"].auto_filter.ref)
+        self.assertEqual(len(workbook["Tren Periode"]._charts), 1)
+        self.assertEqual(len(workbook["Grafik Indikator"]._charts), 1)
+        self.assertEqual(len(workbook["Grafik Lokasi"]._charts), 1)
+        self.assertIsNotNone(workbook["Tren Periode"]._charts[0].series[0].cat.strRef)
+        self.assertIsNotNone(workbook["Grafik Indikator"]._charts[0].series[0].cat.strRef)
+        self.assertIsNotNone(workbook["Grafik Lokasi"]._charts[0].series[0].cat.strRef)
 
     def test_region_account_exports_excel_only_for_its_own_region(self):
         self._login("jabar2")
@@ -222,6 +267,16 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('action="/reports/excel"', response.text)
         self.assertIn('formaction="/reports/pdf"', response.text)
+        self.assertIn("Tabel Detail FEWS", response.text)
+        self.assertIn("10 Risiko Terparah", response.text)
+
+    def test_real_pdf_export_contains_complete_report(self):
+        self._login("admin2")
+        response = self.client.get("/reports/pdf?region=Jawa%20Barat&period_type=bulanan&month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertGreater(len(response.content), 3000)
 
     def test_admin_can_mark_finding_verified(self):
         self._login("admin2")

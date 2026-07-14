@@ -1443,13 +1443,14 @@ details[open] > .disclosure-summary .toggle-label::after {
 .verify-button:hover { border-color: #1677d2; color: #0b64b6; }
 .export-button { background: #0b5fa7; border-color: #0b5fa7; color: #fff; }
 .export-button:hover { background: #084d89; }
+.export-button:disabled { cursor: not-allowed; opacity: .48; box-shadow: none; }
 
 .monitoring-header { margin-bottom: 16px; }
 .monitoring-header h2 { min-width: 0; overflow-wrap: anywhere; font-size: clamp(25px, 2.4vw, 34px); letter-spacing: -.035em; }
 
 .monitor-filter {
     display: grid;
-    grid-template-columns: 1.1fr 1.1fr .85fr 1.25fr 1.1fr auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     align-items: end;
     background: #fff;
@@ -1459,6 +1460,8 @@ details[open] > .disclosure-summary .toggle-label::after {
     margin-bottom: 16px;
     box-shadow: 0 1px 2px rgba(15, 38, 60, .04);
 }
+
+.filter-field[hidden] { display: none; }
 
 .filter-field { min-width: 0; }
 .filter-field label { display: block; margin-bottom: 7px; color: #3d5064; font-size: 12px; font-weight: 700; }
@@ -1503,16 +1506,16 @@ details[open] > .disclosure-summary .toggle-label::after {
     min-height: 122px;
     background: #fff;
     border: 1px solid var(--border);
-    border-left: 4px solid #1677d2;
+    border-top: 3px solid var(--accent);
     border-radius: 9px;
     padding: 18px 20px;
     display: grid;
     align-content: center;
     gap: 5px;
 }
-.monitor-kpi.warning { border-left-color: #f59e0b; }
-.monitor-kpi.danger { border-left-color: #e5484d; }
-.monitor-kpi.info { border-left-color: #009688; }
+.monitor-kpi.warning { border-top-color: var(--warning); }
+.monitor-kpi.danger { border-top-color: var(--danger); }
+.monitor-kpi.info { border-top-color: var(--success); }
 .monitor-kpi span { color: #42576b; font-weight: 700; font-size: 13px; }
 .monitor-kpi strong { color: #102a43; font-size: 32px; line-height: 1; }
 .monitor-kpi small { color: #718294; }
@@ -1537,6 +1540,10 @@ details[open] > .disclosure-summary .toggle-label::after {
 .monitor-grid { display: grid; gap: 16px; margin-bottom: 16px; }
 .monitor-grid-primary { grid-template-columns: minmax(0, 1.28fr) minmax(390px, .92fr); }
 .monitor-grid-secondary { grid-template-columns: minmax(290px, .65fr) minmax(0, 1.35fr); }
+.chart-pair-grid,
+.ranking-pair-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.national-ranking-panel,
+.trend-panel { margin-bottom: 16px; }
 .monitor-panel {
     min-width: 0;
     background: #fff;
@@ -1559,6 +1566,32 @@ details[open] > .disclosure-summary .toggle-label::after {
 .chart-legend i { width: 18px; height: 3px; border-radius: 2px; }
 .chart-empty { min-height: 280px; display: grid; place-items: center; color: #718294; }
 
+.trend-analysis {
+    display: grid;
+    gap: 3px;
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-top: 3px solid var(--accent);
+    background: var(--surface-soft);
+    color: var(--text);
+}
+.trend-analysis strong { font-size: 13px; }
+.trend-analysis span { color: var(--muted); font-size: 12px; }
+.trend-analysis.trend-naik { border-top-color: var(--danger); background: var(--danger-bg); }
+.trend-analysis.trend-turun { border-top-color: var(--success); background: var(--success-bg); }
+
+.bar-chart { min-height: 320px; }
+.bar-list { display: grid; gap: 13px; }
+.bar-row { min-width: 0; }
+.bar-label { display: flex; justify-content: space-between; gap: 14px; color: var(--text); font-size: 12px; }
+.bar-label span { min-width: 0; overflow-wrap: anywhere; }
+.bar-label strong { flex: 0 0 auto; }
+.bar-track { height: 9px; margin-top: 5px; overflow: hidden; border-radius: 4px; background: var(--line); }
+.bar-track span { display: block; height: 100%; border-radius: inherit; }
+.ranking-table,
+.detail-fews-table,
+.monitor-kpi strong { font-variant-numeric: tabular-nums; }
+
 .ranking-table th { white-space: nowrap; }
 .rank-number { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 6px; background: #e6eef5; color: #28435c; font-weight: 800; }
 .rank-1 { background: #fee2e2; color: #b42318; }
@@ -1579,6 +1612,7 @@ details[open] > .disclosure-summary .toggle-label::after {
 .empty-copy { color: #718294; }
 
 .wide-table { min-width: 1120px; }
+.detail-fews-table { min-width: 1280px; }
 .report-ranking,
 .finding-table-panel { margin-bottom: 16px; }
 .table-note { color: #718294; font-size: 12px; margin: 14px 0 0; }
@@ -1591,7 +1625,9 @@ details[open] > .disclosure-summary .toggle-label::after {
     .monitor-filter { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .filter-actions { justify-content: flex-end; }
     .monitor-grid-primary,
-    .monitor-grid-secondary { grid-template-columns: 1fr; }
+    .monitor-grid-secondary,
+    .chart-pair-grid,
+    .ranking-pair-grid { grid-template-columns: 1fr; }
     .info-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

@@ -1,0 +1,61 @@
+<form class="monitor-filter" method="get" action="{{ filter_action }}" data-period-filter>
+    <div class="filter-field">
+        <label for="region">Wilayah</label>
+        <select id="region" name="region" {% if user.region %}disabled{% endif %}>
+            <option value="">Semua Wilayah</option>
+            {% for item in filter_options.regions %}<option value="{{ item }}" {% if filters.region == item or user.region == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+        </select>
+        {% if user.region %}<input type="hidden" name="region" value="{{ user.region }}">{% endif %}
+    </div>
+    <div class="filter-field">
+        <label for="area">Area</label>
+        <select id="area" name="area"><option value="">Semua Area</option>{% for item in filter_options.areas %}<option value="{{ item }}" {% if filters.area == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+    </div>
+    <div class="filter-field">
+        <label for="location">Lokasi</label>
+        <select id="location" name="location"><option value="">Semua Lokasi</option>{% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+    </div>
+    <div class="filter-field">
+        <label for="period_type">Jenis Periode</label>
+        <select id="period_type" name="period_type" data-period-type>
+            <option value="bulanan" {% if filters.period_type != 'mingguan' %}selected{% endif %}>Bulanan</option>
+            <option value="mingguan" {% if filters.period_type == 'mingguan' %}selected{% endif %}>Mingguan</option>
+        </select>
+    </div>
+    <div class="filter-field" data-month-field>
+        <label for="month">Bulan</label>
+        <input id="month" type="month" name="month" value="{{ filters.month }}">
+    </div>
+    <div class="filter-field" data-week-field>
+        <label for="week">Minggu</label>
+        <input id="week" type="week" name="week" value="{{ filters.week }}">
+    </div>
+    <div class="filter-field">
+        <label for="indicator">Jenis Kesalahan</label>
+        <select id="indicator" name="indicator"><option value="">Semua Kesalahan</option>{% for item in filter_options.indicators %}<option value="{{ item.code }}" {% if filters.indicator == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select>
+    </div>
+    <div class="filter-field">
+        <label for="verification">Status Verifikasi</label>
+        <select id="verification" name="verification"><option value="">Semua Status</option><option value="sudah" {% if filters.verification == 'sudah' %}selected{% endif %}>Sudah Diverifikasi</option><option value="belum" {% if filters.verification == 'belum' %}selected{% endif %}>Belum Diverifikasi</option></select>
+    </div>
+    <div class="filter-actions"><button type="submit">Terapkan</button><a href="{{ filter_action }}">Reset</a></div>
+</form>
+
+<script>
+(() => {
+    const form = document.querySelector("[data-period-filter]");
+    if (!form) return;
+    const type = form.querySelector("[data-period-type]");
+    const month = form.querySelector("[data-month-field]");
+    const week = form.querySelector("[data-week-field]");
+    const sync = () => {
+        const weekly = type.value === "mingguan";
+        month.hidden = weekly;
+        week.hidden = !weekly;
+        month.querySelector("input").disabled = weekly;
+        week.querySelector("input").disabled = !weekly;
+    };
+    type.addEventListener("change", sync);
+    sync();
+})();
+</script>
