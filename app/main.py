@@ -388,25 +388,31 @@ def _extract_column(df, field_name: str, required: bool = True) -> str | None:
     return None
 
 
-def _dashboard_summary(db: Session):
-    total_branch = db.query(func.count(BranchInput.id)).filter(BranchInput.archived_at.is_(None)).scalar() or 0
+def _dashboard_summary(db: Session, region: str = ""):
+    branch_filters = [BranchInput.archived_at.is_(None)]
+    result_filters = [BranchInput.archived_at.is_(None)]
+    if region:
+        branch_filters.append(BranchInput.region == region)
+        result_filters.append(BranchInput.region == region)
+
+    total_branch = db.query(func.count(BranchInput.id)).filter(*branch_filters).scalar() or 0
     status_counter = dict(
         db.query(MatchingResult.status, func.count(MatchingResult.id))
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
-        .filter(BranchInput.archived_at.is_(None))
+        .filter(*result_filters)
         .group_by(MatchingResult.status)
         .all()
     )
     total_high_alert = (
         db.query(func.count(MatchingResult.id))
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
-        .filter(BranchInput.archived_at.is_(None), MatchingResult.risk_score > 7)
+        .filter(*result_filters, MatchingResult.risk_score > 7)
         .scalar()
         or 0
     )
     trend_rows = (
         db.query(BranchInput.transaction_date, func.count(BranchInput.id))
-        .filter(BranchInput.archived_at.is_(None))
+        .filter(*branch_filters)
         .group_by(BranchInput.transaction_date)
         .order_by(BranchInput.transaction_date.desc())
         .limit(10)
@@ -421,7 +427,7 @@ def _dashboard_summary(db: Session):
     rule_payloads = (
         db.query(MatchingResult.triggered_rules)
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
-        .filter(BranchInput.archived_at.is_(None), MatchingResult.triggered_rules.is_not(None))
+        .filter(*result_filters, MatchingResult.triggered_rules.is_not(None))
         .all()
     )
     for (triggered_rules,) in rule_payloads:
@@ -440,7 +446,7 @@ def _dashboard_summary(db: Session):
         db.query(MatchingResult)
         .options(joinedload(MatchingResult.branch_input))
         .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
-        .filter(BranchInput.archived_at.is_(None), MatchingResult.risk_score > 7)
+        .filter(*result_filters, MatchingResult.risk_score > 7)
         .order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc())
         .limit(15)
         .all()
@@ -552,20 +558,37 @@ def dashboard(
     }
     data = build_monitoring_context(db, user, filters)
     data["global_region_rows"] = build_global_region_ranking(db, user, filters)
-    old_summary = {
-        "total_branch": data["total"],
-        "total_need_review": data["need_review"],
-        "total_high_alert": data["high"],
-    }
     context = {
         "request": request,
         "user": user,
         **data,
-        "old_summary": old_summary,
         "system_status": get_system_status(),
         "database_warning": get_database_warning(),
     }
     return templates.TemplateResponse("dashboard.html", context)
+
+
+@app.get("/info", response_class=HTMLResponse)
+def info_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    summary = _dashboard_summary(db, user.region or "")
+    activity_query = db.query(AuditLog).filter(AuditLog.status.in_(["WARNING", "ALERT"]))
+    if user.region:
+        activity_query = activity_query.filter(AuditLog.user_id == user.id)
+    return templates.TemplateResponse(
+        "info.html",
+        {
+            "request": request,
+            "user": user,
+            **summary,
+            "latest_alerts": activity_query.order_by(AuditLog.created_at.desc()).limit(12).all(),
+            "database_warning": get_database_warning(),
+            "scope_label": user.region or "Nasional",
+        },
+    )
 
 
 @app.get("/branch-inputs", response_class=HTMLResponse)
@@ -1047,14 +1070,9 @@ def reports_page(
         "verification": verification,
     }
     summary = build_monitoring_context(db, user, filters)
-    old_summary = {
-        "total_branch": summary["total"],
-        "total_need_review": summary["need_review"],
-        "total_high_alert": summary["high"],
-    }
     return templates.TemplateResponse(
         "reports.html",
-        {"request": request, "user": user, **summary, "old_summary": old_summary},
+        {"request": request, "user": user, **summary},
     )
 
 

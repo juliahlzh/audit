@@ -79,16 +79,50 @@ class MonitoringFeatureTests(unittest.TestCase):
         response = self.client.post("/login", data={"username": username, "password": "secret"}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
 
-    def test_navigation_contains_only_dashboard_and_reports(self):
+    def test_navigation_contains_dashboard_info_and_reports(self):
         self._login("admin2")
         response = self.client.get("/dashboard")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('href="/dashboard"', response.text)
+        self.assertIn('href="/info"', response.text)
         self.assertIn('href="/reports"', response.text)
         self.assertNotIn('href="/branch-inputs"', response.text)
         self.assertNotIn('href="/alerts"', response.text)
         self.assertNotIn("Upload Data", response.text)
+        self.assertNotIn("legacy-info", response.text)
+
+    def test_info_page_contains_complete_legacy_dashboard_information(self):
+        self._login("admin2")
+        response = self.client.get("/info")
+
+        self.assertEqual(response.status_code, 200)
+        for heading in [
+            "Indikator yang Dites",
+            "Aturan Skor Risiko",
+            "Tren Approval Terbaru",
+            "Indikator Paling Sering",
+            "Transaksi Prioritas Investigasi",
+            "Aktivitas Sistem",
+        ]:
+            self.assertIn(heading, response.text)
+        self.assertIn("H+2 hari kerja dari tanggal bank", response.text)
+        self.assertNotIn("Upload Data", response.text)
+
+    def test_region_account_info_is_scoped_to_its_region(self):
+        self._add_result(
+            region="Jawa Tengah", location="Solo", invoice="JTG-HIGH", score=9,
+            follow_up="OPEN", code="amount_mismatch", name="Jumlah biaya tidak sesuai jumlah setor",
+        )
+        self.db.commit()
+        self._login("jabar2")
+
+        response = self.client.get("/info")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("JBR-1", response.text)
+        self.assertNotIn("JTG-HIGH", response.text)
+        self.assertIn("cakupan Jawa Barat", response.text)
 
     def test_region_account_has_read_only_alert_center_and_scoped_data(self):
         self._login("jabar2")

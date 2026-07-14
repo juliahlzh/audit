@@ -5,6 +5,7 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 ## Fitur
 
 - Dashboard ranking wilayah per periode, KPI, dan grafik garis enam bulan.
+- Menu Info memuat indikator, aturan skor, tren approval, indikator teratas, prioritas investigasi, dan aktivitas dari dashboard awal.
 - Filter wilayah, area, lokasi, bulan, jenis kesalahan, dan status verifikasi.
 - Ranking lokasi dari total skor terparah hingga terendah.
 - Tabel `ID Unix–Kesalahan–Jumlah–Skor` sesuai layout SOP.

@@ -11,8 +11,9 @@ Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lo
 - Satu akun dibuat untuk setiap 15 wilayah pada master organisasi.
 - Detail KPI, grafik, laporan, temuan, ekspor, dan Alert Center akun wilayah hanya memuat data wilayah tersebut.
 - Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
+- Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini mengikuti pembatasan wilayah akun dan tidak mengembalikan upload/manual input yang sudah dinonaktifkan.
 - Hanya admin/auditor yang dapat mengubah status verifikasi atau tindak lanjut.
-- Tombol **Info** mempertahankan ringkasan fungsi dashboard lama.
+- Menu **Info** mempertahankan seluruh informasi monitoring dashboard lama dalam halaman terpisah.
 - Manual input dan upload Excel tidak tersedia di UI operasional.
 
 ## Master organisasi
@@ -76,7 +77,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Akun wilayah hanya melihat detail wilayahnya pada Dashboard, Laporan, ekspor, dan Alert Center.
 - Ranking nasional tetap terlihat pada Dashboard akun wilayah.
 - Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
-- Admin tetap hanya melihat Dashboard/Laporan pada navigasi; akun wilayah juga melihat Alert Center.
+- Admin melihat Dashboard/Info/Laporan pada navigasi; akun wilayah juga melihat Alert Center.
 - Tidak ada tombol/form upload atau manual input pada UI.
 - Filter area memengaruhi data secara nyata.
 - Grafik garis, ranking, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.

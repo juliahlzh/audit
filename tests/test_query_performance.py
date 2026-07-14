@@ -149,11 +149,14 @@ class QueryPerformanceTests(unittest.TestCase):
         ]
         self.assertLessEqual(len(loaded_business_rows), 15)
 
-    def test_dashboard_explains_h_plus_two_bank_date_limit(self):
-        response = self.client.get("/dashboard")
+    def test_info_page_explains_h_plus_two_bank_date_limit(self):
+        response = self.client.get("/info")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("H+2 hari kerja dari tanggal bank", response.text)
+
+        dashboard = self.client.get("/dashboard")
+        self.assertNotIn("H+2 hari kerja dari tanggal bank", dashboard.text)
 
     def test_branch_inputs_page_is_paginated(self):
         response = self.client.get("/branch-inputs", follow_redirects=False)
