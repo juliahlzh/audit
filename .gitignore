@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+storage/*.db
+storage/*.db-*
+storage/write_test.txt
+storage/uploads/*
+!storage/uploads/sample1.txt
+!storage/uploads/sample2.txt
+!storage/uploads/sample3.txt
+tmp_check_root.db*
+CATATAN_AKUN_FEWS.txt
+
+.vercel

@@ -1,0 +1,19 @@
+CATATAN AKUN FEWS
+=================
+
+Admin
+Username: admin
+Password: admin123
+
+Auditor
+Username: auditor
+Password: auditor123
+
+Viewer
+Username: viewer
+Password: viewer123
+
+PENTING:
+- File ini hanya untuk catatan lokal.
+- Jangan unggah atau bagikan file ini ke publik.
+- Ganti password default sebelum aplikasi digunakan untuk data produksi.
