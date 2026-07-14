@@ -4,7 +4,8 @@
     <div><h2>Laporan FEWS</h2><p class="muted">Ranking lokasi dan temuan terverifikasi sesuai filter aktif.</p></div>
     <form method="get" action="/reports/excel" class="export-form">
         <input type="hidden" name="region" value="{{ filters.region }}"><input type="hidden" name="area" value="{{ filters.area }}"><input type="hidden" name="location" value="{{ filters.location }}"><input type="hidden" name="month" value="{{ filters.month }}"><input type="hidden" name="indicator" value="{{ filters.indicator }}"><input type="hidden" name="verification" value="{{ filters.verification }}">
-        <button type="submit" class="export-button">↓ Export Tabel Excel</button>
+        <button type="submit" class="export-button">↓ Export Excel</button>
+        <button type="submit" class="export-button secondary" formaction="/reports/pdf">↓ Export PDF</button>
     </form>
 </div>
 

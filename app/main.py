@@ -11,7 +11,7 @@ from time import perf_counter
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -27,7 +27,7 @@ from .dependencies import get_current_user, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
-from .services.analytics import build_global_region_ranking, build_monitoring_context, filter_options
+from .services.analytics import build_global_region_ranking, build_monitoring_context, filter_options, filtered_results
 from .services.matching_engine import run_matching
 from .services.organization import ORGANIZATION_ROWS
 from .services.rule_config import RULE_CONFIG
@@ -1167,8 +1167,11 @@ def export_excel(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    effective_region = (user.region or region).strip()
+    if not effective_region:
+        raise HTTPException(status_code=400, detail="Pilih satu wilayah sebelum mengekspor laporan.")
     filters = {
-        "region": region,
+        "region": effective_region,
         "area": area,
         "location": location,
         "month": month,
@@ -1177,11 +1180,33 @@ def export_excel(
     }
     context = build_monitoring_context(db, user, filters)
     data = build_ranked_excel_report(context["location_rows"], filters)
-    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=fews_ranking_lokasi.xlsx"})
+    region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
+    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_ranking_lokasi.xlsx"})
 
 
 @app.get("/reports/pdf")
-def export_pdf(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = db.query(MatchingResult).options(joinedload(MatchingResult.branch_input)).join(BranchInput, MatchingResult.branch_input_id == BranchInput.id).filter(BranchInput.archived_at.is_(None)).order_by(MatchingResult.risk_score.desc(), MatchingResult.updated_at.desc()).all()
-    data = build_pdf_report(rows)
-    return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=fews_dana_masuk_report.pdf"})
+def export_pdf(
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    month: str = "",
+    indicator: str = "",
+    verification: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    effective_region = (user.region or region).strip()
+    if not effective_region:
+        raise HTTPException(status_code=400, detail="Pilih satu wilayah sebelum mengekspor laporan.")
+    filters = {
+        "region": effective_region,
+        "area": area,
+        "location": location,
+        "month": month,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    rows = filtered_results(db, user, **filters)
+    data = build_pdf_report(rows, effective_region)
+    region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
+    return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_laporan.pdf"})

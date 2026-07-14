@@ -67,7 +67,7 @@ Loader harus idempoten, memetakan area dari master lokasi, dan tidak otomatis me
 
 ## Ekspor
 
-Ekspor Excel harus mengikuti filter aktif, berbentuk tabel Excel, memiliki autofilter/freeze pane, memuat Wilayah–Area–Lokasi, serta diurutkan dari risiko terparah hingga terendah.
+Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Excel berbentuk tabel, memiliki autofilter/freeze pane, memuat Wilayah–Area–Lokasi, serta diurutkan dari risiko terparah hingga terendah.
 
 ## Kriteria penerimaan
 

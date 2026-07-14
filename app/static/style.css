@@ -1564,7 +1564,9 @@ details[open] > .disclosure-summary .toggle-label::after {
 .finding-table-panel { margin-bottom: 16px; }
 .table-note { color: #718294; font-size: 12px; margin: 14px 0 0; }
 .verify-button { min-height: 32px; padding: 0 10px; font-size: 12px; color: #0b64b6; }
-.export-form { margin: 0; }
+.export-form { display: flex; gap: 8px; margin: 0; }
+.export-button.secondary { background: #fff; border-color: #0b5fa7; color: #0b5fa7; }
+.export-button.secondary:hover { background: #edf6ff; }
 
 .modal-backdrop {
     position: fixed;

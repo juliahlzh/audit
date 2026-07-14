@@ -8,7 +8,7 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 - Filter wilayah, area, lokasi, bulan, jenis kesalahan, dan status verifikasi.
 - Ranking lokasi dari total skor terparah hingga terendah.
 - Tabel `ID Unix–Kesalahan–Jumlah–Skor` sesuai layout SOP.
-- Ekspor tabel Excel dengan ranking, autofilter, freeze pane, dan konteks filter.
+- Ekspor PDF dan tabel Excel per wilayah dengan ranking, autofilter, freeze pane, dan konteks filter; ekspor nasional tanpa wilayah ditolak.
 - Master organisasi dari `Wilayah, Area, dan Lokasi.pptx`: 15 wilayah, 41 area, dan 165 lokasi.
 - Satu akun read-only per wilayah. Dashboard detail, Laporan, dan Alert Center otomatis dibatasi ke wilayah akun.
 - Ranking wilayah nasional tetap terlihat pada dashboard akun wilayah tanpa membuka detail temuan wilayah lain.

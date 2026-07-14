@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 from datetime import date
 from io import BytesIO
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
@@ -145,6 +146,48 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(sheet["D6"].value, "Bandung")
         self.assertEqual(sheet["D7"].value, "Semarang")
         self.assertEqual(sheet.tables["RankingLokasiFEWS"].ref, "A5:N7")
+
+    def test_region_account_exports_excel_only_for_its_own_region(self):
+        self._login("jabar2")
+        response = self.client.get("/reports/excel?region=Jawa%20Tengah&month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("fews_jawa_barat_ranking_lokasi.xlsx", response.headers["content-disposition"])
+        sheet = load_workbook(BytesIO(response.content))["Ranking Lokasi"]
+        exported_regions = {sheet.cell(row=row, column=2).value for row in range(6, sheet.max_row + 1)}
+        self.assertEqual(exported_regions, {"Jawa Barat"})
+
+    def test_admin_must_select_region_before_excel_or_pdf_export(self):
+        self._login("admin2")
+
+        excel = self.client.get("/reports/excel")
+        pdf = self.client.get("/reports/pdf")
+
+        self.assertEqual(excel.status_code, 400)
+        self.assertEqual(pdf.status_code, 400)
+        self.assertIn("Pilih satu wilayah", excel.json()["detail"])
+        self.assertIn("Pilih satu wilayah", pdf.json()["detail"])
+
+    def test_pdf_export_uses_active_filters_and_locked_region(self):
+        self._login("jabar2")
+        with patch("app.main.build_pdf_report", return_value=b"%PDF-FAKE") as pdf_builder:
+            response = self.client.get(
+                "/reports/pdf?region=Jawa%20Tengah&month=2026-06&verification=sudah"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("fews_jawa_barat_laporan.pdf", response.headers["content-disposition"])
+        rows, region = pdf_builder.call_args.args
+        self.assertEqual(region, "Jawa Barat")
+        self.assertEqual([row.branch_input.invoice_code for row in rows], ["JBR-1"])
+
+    def test_report_page_offers_excel_and_pdf_exports(self):
+        self._login("admin2")
+        response = self.client.get("/reports?region=Jawa%20Barat")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('action="/reports/excel"', response.text)
+        self.assertIn('formaction="/reports/pdf"', response.text)
 
     def test_admin_can_mark_finding_verified(self):
         self._login("admin2")

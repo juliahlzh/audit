@@ -196,16 +196,18 @@ def build_ranked_excel_report(location_rows, filters):
     return output.getvalue()
 
 
-def build_pdf_report(transactions):
+def build_pdf_report(transactions, region: str = ""):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape
 
     output = BytesIO()
     doc = SimpleDocTemplate(output, pagesize=A4)
     styles = getSampleStyleSheet()
-    elements = [Paragraph("Laporan FEWS Per Lokasi", styles["Title"]), Spacer(1, 12)]
+    title = f"Laporan FEWS Wilayah {escape(region)}" if region else "Laporan FEWS Per Lokasi"
+    elements = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
     table_data = [["Lokasi", "Total", "High", "Review", "Skor Max", "Risiko", "Indikator Utama"]]
     for row in summarize_by_location(transactions)[:25]:
         table_data.append(
