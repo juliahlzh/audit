@@ -134,16 +134,80 @@ def build_excel_report(transactions):
     return output.getvalue()
 
 
-def build_pdf_report(transactions):
+def build_ranked_excel_report(location_rows, filters):
+    from datetime import datetime
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Ranking Lokasi"
+    sheet.append(["Laporan Ranking FEWS"])
+    sheet["A1"].font = Font(size=16, bold=True, color="FFFFFF")
+    sheet["A1"].fill = PatternFill("solid", fgColor="0B2B4C")
+    sheet.merge_cells("A1:N1")
+    sheet.append(["Dibuat", datetime.now().strftime("%d/%m/%Y %H:%M")])
+    sheet.append([
+        "Filter",
+        "; ".join(
+            f"{label}: {filters.get(key) or 'Semua'}"
+            for key, label in [
+                ("region", "Wilayah"), ("area", "Area"), ("location", "Lokasi"), ("month", "Bulan"),
+                ("indicator", "Kesalahan"), ("verification", "Verifikasi"),
+            ]
+        ),
+    ])
+    sheet.append([])
+    headers = [
+        "Peringkat", "Wilayah", "Area", "Lokasi", "Total Temuan", "High Alert", "Need Review",
+        "Risiko Rendah", "Total Skor", "Skor Tertinggi", "Rata-rata Skor", "Tingkat Risiko",
+        "Sudah Diverifikasi", "Belum Diverifikasi",
+    ]
+    sheet.append(headers)
+    for row in location_rows:
+        sheet.append([
+            row["rank"], row["region"], row["area"], row["name"], row["total"], row["high"], row["medium"],
+            row["low"], row["score_total"], row["max_score"], row["avg_score"], row["risk_label"],
+            row["verified"], row["unverified"],
+        ])
+
+    header_row = 5
+    if location_rows:
+        table = Table(displayName="RankingLokasiFEWS", ref=f"A{header_row}:N{sheet.max_row}")
+        table.tableStyleInfo = TableStyleInfo(
+            name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False,
+            showRowStripes=True, showColumnStripes=False,
+        )
+        sheet.add_table(table)
+    for cell in sheet[header_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="145DA0")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    sheet.freeze_panes = "A6"
+    sheet.auto_filter.ref = f"A{header_row}:N{max(header_row, sheet.max_row)}"
+    widths = [12, 22, 24, 22, 15, 12, 14, 14, 13, 15, 16, 16, 20, 22]
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[chr(64 + index)].width = width
+    sheet.sheet_view.showGridLines = False
+    sheet.auto_filter.ref = f"A{header_row}:N{max(header_row, sheet.max_row)}"
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def build_pdf_report(transactions, region: str = ""):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape
 
     output = BytesIO()
     doc = SimpleDocTemplate(output, pagesize=A4)
     styles = getSampleStyleSheet()
-    elements = [Paragraph("Laporan FEWS Per Lokasi", styles["Title"]), Spacer(1, 12)]
+    title = f"Laporan FEWS Wilayah {escape(region)}" if region else "Laporan FEWS Per Lokasi"
+    elements = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
     table_data = [["Lokasi", "Total", "High", "Review", "Skor Max", "Risiko", "Indikator Utama"]]
     for row in summarize_by_location(transactions)[:25]:
         table_data.append(

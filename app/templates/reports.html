@@ -1,71 +1,49 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header">
-    <div>
-        <h2>Laporan Periodik FEWS</h2>
-        <p class="muted">Ringkasan monitoring untuk pimpinan berdasarkan periode.</p>
-    </div>
-</div>
-
-<div class="filter-panel compact-filter">
-    <form method="get" action="/reports">
-        <div class="grid two">
-            <div>
-                <label>Periode</label>
-                <select name="period">
-                    <option value="harian" {% if period == 'harian' %}selected{% endif %}>Harian (24 jam)</option>
-                    <option value="mingguan" {% if period == 'mingguan' %}selected{% endif %}>Mingguan (7 hari)</option>
-                    <option value="bulanan" {% if period == 'bulanan' %}selected{% endif %}>Bulanan (30 hari)</option>
-                </select>
-            </div>
-        </div>
-        <button type="submit">Tampilkan</button>
+<div class="page-header monitoring-header">
+    <div><h2>Laporan FEWS</h2><p class="muted">Ranking lokasi dan temuan terverifikasi sesuai filter aktif.</p></div>
+    <form method="get" action="/reports/excel" class="export-form">
+        <input type="hidden" name="region" value="{{ filters.region }}"><input type="hidden" name="area" value="{{ filters.area }}"><input type="hidden" name="location" value="{{ filters.location }}"><input type="hidden" name="month" value="{{ filters.month }}"><input type="hidden" name="indicator" value="{{ filters.indicator }}"><input type="hidden" name="verification" value="{{ filters.verification }}">
+        <button type="submit" class="export-button">↓ Export Excel</button>
+        <button type="submit" class="export-button secondary" formaction="/reports/pdf">↓ Export PDF</button>
     </form>
 </div>
 
-<div class="grid four">
-    <div class="metric-card"><span>Total Transaksi</span><strong>{{ total }}</strong><small>Dalam periode</small></div>
-    <div class="metric-card"><span>Total Lokasi</span><strong>{{ location_total }}</strong><small>Lokasi terpantau</small></div>
-    <div class="metric-card danger"><span>High Alert</span><strong>{{ high }}</strong><small>Prioritas utama</small></div>
-    <div class="metric-card warning"><span>Need Review</span><strong>{{ medium }}</strong><small>Perlu klarifikasi</small></div>
+<form class="monitor-filter" method="get" action="/reports">
+    <div class="filter-field">
+        <label for="region">Wilayah</label>
+        <select id="region" name="region" {% if user.region %}disabled{% endif %}><option value="">Semua Wilayah</option>{% for item in filter_options.regions %}<option value="{{ item }}" {% if filters.region == item or user.region == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+        {% if user.region %}<input type="hidden" name="region" value="{{ user.region }}">{% endif %}
+    </div>
+    <div class="filter-field"><label for="area">Area</label><select id="area" name="area"><option value="">Semua Area</option>{% for item in filter_options.areas %}<option value="{{ item }}" {% if filters.area == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
+    <div class="filter-field"><label for="location">Lokasi</label><select id="location" name="location"><option value="">Semua Lokasi</option>{% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
+    <div class="filter-field"><label for="month">Periode (bulan)</label><input id="month" type="month" name="month" value="{{ filters.month }}"></div>
+    <div class="filter-field"><label for="indicator">Jenis Kesalahan</label><select id="indicator" name="indicator"><option value="">Semua Kesalahan</option>{% for item in filter_options.indicators %}<option value="{{ item.code }}" {% if filters.indicator == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></div>
+    <div class="filter-field"><label for="verification">Status Verifikasi</label><select id="verification" name="verification"><option value="">Semua Status</option><option value="sudah" {% if filters.verification == 'sudah' %}selected{% endif %}>Sudah Diverifikasi</option><option value="belum" {% if filters.verification == 'belum' %}selected{% endif %}>Belum Diverifikasi</option></select></div>
+    <div class="filter-actions"><button type="submit">Terapkan</button><a href="/reports">Reset</a></div>
+</form>
+
+<div class="monitor-kpis report-kpis">
+    <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Dalam hasil filter</small></div>
+    <div class="monitor-kpi danger"><span>Risiko Tinggi</span><strong>{{ high }}</strong><small>Prioritas investigasi</small></div>
+    <div class="monitor-kpi warning"><span>Belum Diverifikasi</span><strong>{{ unverified }}</strong><small>Perlu tindak lanjut</small></div>
+    <div class="monitor-kpi info"><span>Lokasi Terpantau</span><strong>{{ location_rows|length }}</strong><small>Urutan risiko aktif</small></div>
 </div>
 
-<div class="panel">
-    <div class="section-heading">
-        <div>
-            <h3>Ringkasan Per Lokasi Periode {{ period|capitalize }}</h3>
-            <p class="muted">Laporan ini sengaja tidak menampilkan nama konsumen/siswa. Fokusnya adalah lokasi, jumlah temuan, indikator, dan tindak lanjut.</p>
-        </div>
-    </div>
-    <div class="table-wrap"><table>
-        <thead>
-            <tr>
-                <th>Lokasi/Cabang</th>
-                <th>Total</th>
-                <th>High Alert</th>
-                <th>Need Review</th>
-                <th>Skor</th>
-                <th>Risiko</th>
-                <th>Indikator yang Muncul</th>
-                <th>Tindak Lanjut</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in location_rows %}
-            <tr class="risk-{{ row.risk_label|lower }}">
-                <td><strong>{{ row.location }}</strong><br><span class="muted">Terakhir: {{ row.latest_date|date_id }}</span></td>
-                <td>{{ row.total }}</td>
-                <td>{{ row.high }}</td>
-                <td>{{ row.medium }}</td>
-                <td>Maks {{ row.max_score }}<br><span class="muted">Rata-rata {{ row.avg_score }}</span></td>
-                <td><span class="badge">{{ row.risk_label }}</span></td>
-                <td>{{ row.indicator_summary }}</td>
-                <td>{{ row.follow_up_summary }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="8">Belum ada data pada periode ini.</td></tr>
-            {% endfor %}
-        </tbody>
+<section class="monitor-panel report-ranking">
+    <div class="monitor-panel-heading"><div><h3>Ranking Lokasi dari Terparah hingga Terendah</h3><p>Urutan: total skor, high alert, need review, kemudian jumlah temuan.</p></div></div>
+    <div class="table-wrap"><table class="ranking-table wide-table">
+        <thead><tr><th>Rank</th><th>Wilayah</th><th>Area</th><th>Lokasi</th><th>Total</th><th>High</th><th>Review</th><th>Total Skor</th><th>Skor Max</th><th>Risiko</th><th>Sudah</th><th>Belum</th><th>Kesalahan Dominan</th></tr></thead>
+        <tbody>{% for row in location_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td>{{ row.region }}</td><td>{{ row.area }}</td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td>{{ row.high }}</td><td>{{ row.medium }}</td><td><strong>{{ row.score_total }}</strong></td><td>{{ row.max_score }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>{{ row.verified }}</td><td>{{ row.unverified }}</td><td>{{ row.indicator_summary }}</td></tr>{% else %}<tr><td colspan="13">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
     </table></div>
-</div>
+</section>
+
+<section class="monitor-panel finding-table-panel">
+    <div class="monitor-panel-heading"><div><h3>Temuan Terbaru</h3><p>Tabel FEWS: ID Unix, kesalahan, jumlah, skor, dan verifikasi.</p></div></div>
+    <div class="table-wrap"><table class="wide-table">
+        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Tipe Data</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead>
+        <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td>{{ row.branch_input.data_type }}</td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td><td>{% if row.follow_up_status != 'RESOLVED' and user.role in ['admin', 'auditor'] %}<form method="post" action="/reports/{{ row.id }}/verify"><input type="hidden" name="notes" value="Diverifikasi dari tabel laporan FEWS"><input type="hidden" name="return_to" value="/reports{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="verify-button" type="submit">Verifikasi</button></form>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% else %}<tr><td colspan="11">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if total > recent_rows|length %}<p class="table-note">Menampilkan {{ recent_rows|length }} temuan terbaru. Export Excel memuat seluruh ranking sesuai filter.</p>{% endif %}
+</section>
 {% endblock %}

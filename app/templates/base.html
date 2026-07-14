@@ -10,63 +10,50 @@
     <div class="layout">
         <aside class="sidebar">
             <div class="brand-block">
-                <div>
-                    <h1>FEWS</h1>
-                    <p>Approval Monitoring</p>
-                </div>
+                <div><h1>FEWS</h1><p>Fraud Early Warning System</p></div>
             </div>
             {% if user %}
-            <nav class="nav">
-                <a href="/dashboard" data-nav="/dashboard"><span class="nav-icon">□</span>Dashboard</a>
-                <a href="/branch-inputs" data-nav="/branch-inputs"><span class="nav-icon">↑</span>Upload Excel</a>
-                <a href="/alerts" data-nav="/alerts"><span class="nav-icon">!</span>Alert Center</a>
-                <a href="/reports" data-nav="/reports"><span class="nav-icon">▦</span>Laporan</a>
-                {% if user.role in ["admin", "auditor"] %}
-                <form method="post" action="/matching/run">
-                    <button class="nav-button" type="submit"><span class="nav-icon">↻</span>Jalankan Deteksi</button>
-                </form>
+            <nav class="nav" aria-label="Navigasi utama">
+                <a href="/dashboard" data-nav="/dashboard">
+                    <span class="nav-icon" aria-hidden="true">▦</span>Dashboard
+                </a>
+                <a href="/info" data-nav="/info">
+                    <span class="nav-icon" aria-hidden="true">i</span>Info
+                </a>
+                <a href="/reports" data-nav="/reports">
+                    <span class="nav-icon" aria-hidden="true">≡</span>Laporan
+                </a>
+                {% if user.region %}
+                <a href="/alerts" data-nav="/alerts">
+                    <span class="nav-icon" aria-hidden="true">!</span>Alert Center
+                </a>
                 {% endif %}
-                <a href="/logs" data-nav="/logs"><span class="nav-icon">≡</span>Riwayat Sistem</a>
-                <div class="nav-group">
-                    <a href="/reports/excel"><span class="nav-icon">X</span>Export Excel</a>
-                    <a href="/reports/pdf"><span class="nav-icon">P</span>Export PDF</a>
-                </div>
-                <a href="/logout" class="nav-exit"><span class="nav-icon">→</span>Logout</a>
+                <a href="/logout" class="nav-exit"><span class="nav-icon" aria-hidden="true">→</span>Logout</a>
             </nav>
+            <div class="sidebar-foot">
+                <strong>{{ user.full_name }}</strong>
+                <span>{{ user.region or 'Seluruh wilayah' }}</span>
+            </div>
             {% endif %}
         </aside>
         <main class="content">
             {% if user %}
-            <header class="topbar">
-                <button class="sidebar-toggle" type="button" aria-label="Toggle navigation">☰</button>
-                <div class="topbar-title">
-                    <span>Monitoring Approval</span>
-                    <strong>{{ user.full_name }}</strong>
-                </div>
-                <div class="user-badge">{{ user.role }}</div>
+            <header class="topbar monitoring-topbar">
+                <button class="sidebar-toggle" type="button" aria-label="Buka navigasi">☰</button>
+                <div class="topbar-title"><span>Monitoring Approval</span><strong>{{ user.region or 'Nasional' }}</strong></div>
             </header>
             {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>
+
     <script>
         const currentPath = window.location.pathname;
         document.querySelectorAll("[data-nav]").forEach((item) => {
             const target = item.getAttribute("data-nav");
             if (currentPath === target || currentPath.startsWith(target + "/")) item.classList.add("active");
         });
-        document.querySelector(".sidebar-toggle")?.addEventListener("click", () => {
-            document.body.classList.toggle("sidebar-open");
-        });
-        document.querySelectorAll('input[type="file"]').forEach((input) => {
-            input.addEventListener("change", () => {
-                const name = input.files?.[0]?.name || "Belum ada file dipilih";
-                input.closest("form")?.style.setProperty("--selected-file", `"${name}"`);
-                input.dataset.filename = name;
-                const hint = input.closest(".file-drop")?.querySelector(".file-hint");
-                if (hint) hint.textContent = name;
-            });
-        });
+        document.querySelector(".sidebar-toggle")?.addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
     </script>
 </body>
 </html>

@@ -1,44 +1,90 @@
-# FEWS Frontend Redesign PRD
+# FEWS Monitoring PRD — Pembaruan 14 Juli 2026
 
-## Objective
+## Tujuan
 
-Upgrade the FEWS server-rendered UI so audit users can upload approval data, interpret fraud signals, and follow up findings faster with a polished internal-tool interface.
+Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lokasi yang mengikuti SOP dan layout FEWS terbaru. Aplikasi tetap memakai FastAPI, Jinja, SQLAlchemy, CSS, dan JavaScript ringan.
 
-## Scope
+## Navigasi dan hak akses
 
-- Keep the existing FastAPI/Jinja architecture.
-- Apply a restrained, shadcn-inspired visual system using native HTML, CSS, and small vanilla JavaScript.
-- Use the organization logo colors only as palette reference: deep blue, active cyan, and lime success accents.
-- Do not display logo assets or recreate logo-like brand marks in the app; use text-only `FEWS` branding.
-- Improve all visible pages: login, app shell, dashboard, upload approval, alert center, reports, logs, and legacy transaction views.
-- Preserve existing routes, forms, and backend behavior.
-- Avoid React/Tailwind migration for this pass so the project remains easy to zip and deploy to Vercel.
-- Keep this pass visual-only: no new routes, API contracts, database fields, export behavior, charts, or backend features.
+- Admin/auditor: **Dashboard** dan **Laporan**.
+- Akun wilayah read-only: **Dashboard**, **Laporan**, dan **Alert Center**.
+- Satu akun dibuat untuk setiap 15 wilayah pada master organisasi.
+- Detail KPI, grafik, laporan, temuan, ekspor, dan Alert Center akun wilayah hanya memuat data wilayah tersebut.
+- Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
+- Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini mengikuti pembatasan wilayah akun dan tidak mengembalikan upload/manual input yang sudah dinonaktifkan.
+- Hanya admin/auditor yang dapat mengubah status verifikasi atau tindak lanjut.
+- Menu **Info** mempertahankan seluruh informasi monitoring dashboard lama dalam halaman terpisah.
+- Manual input dan upload Excel tidak tersedia di UI operasional.
 
-## UX Goals
+## Master organisasi
 
-- Make risk severity obvious at a glance.
-- Reduce visual noise in the dashboard and alert center.
-- Make upload workflow feel deliberate and confidence-building.
-- Keep dense tables readable with sticky headers, clearer row separation, and responsive scroll.
-- Provide consistent page headers, buttons, badges, filters, cards, and empty states.
-- Avoid generic AI-slop aesthetics: no decorative logo blocks, noisy gradients, heavy glows, excessive pills, or warm legacy tones in primary UI.
+Sumber struktur adalah `D:\Audit\Wilayah, Area, dan Lokasi.pptx`:
 
-## Reference Direction
+- 15 wilayah;
+- 41 area;
+- 165 cabang/lokasi belajar.
 
-- 21st.dev dashboard/admin/sidebar/table patterns: dense but clean operational layouts.
-- shadcn/ui dashboard examples: neutral surfaces, subtle borders, consistent control sizing, concise side navigation.
-- Bimbel Nurul Fikri logo palette translated into UI tokens only:
-  - Primary/nav: `#0050A0`, `#0060B0`
-  - Active/info: `#1080E0`, `#1090F0`, `#30B0F0`
-  - Success/positive: `#80E000` with soft success surfaces
-  - Surface/text/border: white, cool gray, charcoal/navy
-  - Danger: restrained audit red for high-risk states
+Nama `Cabang Serang` pada baris Kramatwatu dinormalisasi sebagai `Area Serang` agar konsisten dengan rekap tiga area wilayah Banten. Master versi aplikasi disimpan di `app/services/organization.py` dan dipakai untuk akun, opsi filter, serta pemetaan lokasi.
 
-## Constraints
+## Filter
 
-- No new heavy frontend dependencies.
-- No loss of accessibility for forms and links.
-- CSS should remain standalone in `app/static/style.css`.
-- JavaScript should be progressive enhancement only; forms must still work without it.
-- No logo image usage in sidebar, login, cards, empty states, or decorative blocks.
+Dashboard dan Laporan memakai filter konsisten:
+
+- wilayah;
+- area;
+- lokasi;
+- periode bulanan;
+- jenis kesalahan/indikator;
+- status verifikasi (`Sudah Diverifikasi` atau `Belum Diverifikasi`).
+
+Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanjut yang sudah ada. Wilayah pada akun regional selalu terkunci.
+
+## Definisi data
+
+- **Wilayah** menaungi satu atau lebih area.
+- **Area** menaungi satu atau lebih lokasi/cabang.
+- **Lokasi** memakai `branch_name`.
+- **Sudah Diverifikasi** berarti `follow_up_status = RESOLVED`.
+- **Belum Diverifikasi** berarti status selain `RESOLVED`.
+- Ranking menurun berdasarkan total skor, lalu high alert, need review, jumlah temuan, dan nama.
+- Risiko: skor `> 7` tinggi, `4–7` sedang, dan `0–3` rendah.
+
+## SOP dan visualisasi
+
+Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas input maksimal H+2 hari kerja dari tanggal bank dan warning merah setelah lebih dari H+10. Layout memuat:
+
+- tabel ID Unix, kesalahan, jumlah kesalahan, dan skor;
+- grafik per indikator dan lokasi;
+- grafik garis perbandingan bulanan;
+- ranking wilayah/lokasi per periode;
+- akses detail berbasis wilayah.
+
+## Data pengujian
+
+- `UJI`: data ringkas untuk regression test.
+- `REALISTIS`: data sintetis menyerupai pola operasional, bukan data produksi atau temuan audit nyata.
+
+Loader harus idempoten, memetakan area dari master lokasi, dan tidak otomatis mengisi database produksi.
+
+## Ekspor
+
+Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Excel berbentuk tabel, memiliki autofilter/freeze pane, memuat Wilayah–Area–Lokasi, serta diurutkan dari risiko terparah hingga terendah.
+
+## Kriteria penerimaan
+
+- Master berisi tepat 15 wilayah, 41 area, dan 165 lokasi.
+- Semua akun wilayah dibuat idempoten dengan role `viewer` dan wilayah terkunci.
+- Akun wilayah hanya melihat detail wilayahnya pada Dashboard, Laporan, ekspor, dan Alert Center.
+- Ranking nasional tetap terlihat pada Dashboard akun wilayah.
+- Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
+- Admin melihat Dashboard/Info/Laporan pada navigasi; akun wilayah juga melihat Alert Center.
+- Tidak ada tombol/form upload atau manual input pada UI.
+- Filter area memengaruhi data secara nyata.
+- Grafik garis, ranking, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
+
+## Batasan
+
+- Tidak ada integrasi sumber produksi baru pada perubahan ini.
+- Data sintetis tidak boleh disebut sebagai data real produksi.
+- Route legacy input/upload boleh dipertahankan hanya sebagai redirect/response aman dan tidak boleh muncul sebagai fungsi yang dapat digunakan.

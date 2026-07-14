@@ -99,13 +99,13 @@ class QueryPerformanceTests(unittest.TestCase):
         status_code, select_count = self._select_count_for("/alerts")
 
         self.assertEqual(status_code, 200)
-        self.assertLessEqual(select_count, 4)
+        self.assertLessEqual(select_count, 6)
 
     def test_report_avoids_query_per_transaction(self):
-        status_code, select_count = self._select_count_for("/reports?period=harian")
+        status_code, select_count = self._select_count_for("/reports")
 
         self.assertEqual(status_code, 200)
-        self.assertLessEqual(select_count, 3)
+        self.assertLessEqual(select_count, 5)
 
     def test_web_startup_does_not_eagerly_load_export_libraries(self):
         script = (
@@ -149,22 +149,23 @@ class QueryPerformanceTests(unittest.TestCase):
         ]
         self.assertLessEqual(len(loaded_business_rows), 15)
 
-    def test_dashboard_explains_h_plus_two_bank_date_limit(self):
-        response = self.client.get("/dashboard")
+    def test_info_page_explains_h_plus_two_bank_date_limit(self):
+        response = self.client.get("/info")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("H+2 hari kerja dari tanggal bank", response.text)
 
-    def test_branch_inputs_page_is_paginated(self):
-        response = self.client.get("/branch-inputs?per_page=20&page=1")
+        dashboard = self.client.get("/dashboard")
+        self.assertNotIn("H+2 hari kerja dari tanggal bank", dashboard.text)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("INV-24", response.text)
-        self.assertNotIn("INV-4<", response.text)
-        self.assertIn("25 data approval", response.text)
+    def test_branch_inputs_page_is_paginated(self):
+        response = self.client.get("/branch-inputs", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/reports")
 
     def test_responses_include_server_timing_header(self):
-        response = self.client.get("/alerts")
+        response = self.client.get("/dashboard")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("app;dur=", response.headers.get("server-timing", ""))

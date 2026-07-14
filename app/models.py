@@ -14,6 +14,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(30), index=True)
+    region: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     transactions: Mapped[list["Transaction"]] = relationship("Transaction", back_populates="created_by_user")
@@ -95,6 +96,9 @@ class BranchInput(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     transaction_date: Mapped[date] = mapped_column(Date, index=True)
     branch_name: Mapped[str] = mapped_column(String(120), index=True)
+    region: Mapped[str] = mapped_column(String(80), default="Belum Dipetakan", index=True)
+    area: Mapped[str] = mapped_column(String(100), default="Belum Dipetakan", index=True)
+    data_type: Mapped[str] = mapped_column(String(20), default="OPERASIONAL", index=True)
     customer_name: Mapped[str] = mapped_column(String(150), index=True)
     amount_should_pay: Mapped[float] = mapped_column(Float)
     amount_input_branch: Mapped[float] = mapped_column(Float, index=True)

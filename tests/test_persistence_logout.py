@@ -2,7 +2,6 @@ import unittest
 import json
 from io import BytesIO
 from datetime import date
-import pandas as pd
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -80,12 +79,11 @@ class LogoutPersistenceTests(unittest.TestCase):
         second_login = self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
         self.assertEqual(second_login.status_code, 303)
 
-        approval_page = self.client.get("/branch-inputs")
-        alert_page = self.client.get("/alerts")
+        report_page = self.client.get("/reports")
 
-        self.assertIn("INV-PERSIST", approval_page.text)
-        self.assertIn("Customer Persist", alert_page.text)
-        self.assertIn("HOLD", alert_page.text)
+        self.assertIn("INV-PERSIST", report_page.text)
+        self.assertNotIn("Customer Persist", report_page.text)
+        self.assertIn("Belum Diverifikasi", report_page.text)
         self.assertIn("Catatan persistensi", self.db.query(MatchingResult).first().follow_up_notes)
 
     def test_login_page_does_not_expose_demo_credentials(self):
@@ -108,84 +106,31 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertNotIn("Customer Persist", report_page.text)
         self.assertNotIn("<th>Customer</th>", report_page.text)
 
-    def test_upload_maps_created_at_as_input_and_tgl_bank_waktu_bank_as_setoran(self):
+    def test_upload_route_is_disabled(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
-        workbook = BytesIO()
-        df = pd.DataFrame(
-            [
-                {
-                    "tanggal transaksi": "05/06/2026",
-                    "nama cabang": "Cabang Mapping",
-                    "nama customer": "Customer Mapping",
-                    "jumlah_biaya": 1000000,
-                    "jumlah_setor": 1000000,
-                    "tipe bayar": "transfer",
-                    "idunix": "INV-MAP",
-                    "created_at": "05/06/2026 00:30:00",
-                    "tgl_bank": "05/06/2026",
-                    "waktu_bank": "06:15:00",
-                    "pegawai": "P001",
-                    "keterangan": "Pembayaran Customer Mapping Cabang Mapping",
-                }
-            ]
-        )
-        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
-        workbook.seek(0)
-
         response = self.client.post(
             "/branch-inputs/upload",
-            files={"excel_file": ("mapping.xlsx", workbook.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            files={"excel_file": ("mapping.xlsx", b"disabled", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             follow_redirects=False,
         )
 
-        self.assertEqual(response.status_code, 303)
-        row = self.db.query(BranchInput).filter(BranchInput.invoice_code == "INV-MAP").one()
-        self.assertIsNone(row.transaction_time)
-        self.assertEqual(row.transaction_date.isoformat(), "2026-06-05")
-        self.assertEqual(row.source_created_at.strftime("%Y-%m-%d %H:%M"), "2026-06-05 00:30")
-        self.assertEqual(row.bank_date.isoformat(), "2026-06-05")
-        self.assertEqual(row.deposit_date.isoformat(), "2026-06-05")
-        self.assertEqual(row.payment_received_at.strftime("%Y-%m-%d %H:%M"), "2026-06-05 06:15")
-        result = self.db.query(MatchingResult).filter(MatchingResult.branch_input_id == row.id).one()
-        self.assertIn("00:01-05:00", result.triggered_rules)
-        page = self.client.get("/branch-inputs")
-        self.assertIn("Jumat, 05/06/2026", page.text)
-        self.assertNotIn(">2026-06-05<", page.text)
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(self.db.query(BranchInput).count(), 1)
 
-    def test_upload_accepts_original_setoran_bank_two_row_header_template(self):
+    def test_manual_input_route_is_disabled(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
-        workbook = BytesIO()
-        df = pd.DataFrame(
-            [
-                ["id", "Cabang", "", "", "", "", "Nominal", "", "Tanggal Bank", "Waktu TF bank", "", "", "", "Petugas Input", "Tanggal Input", "", "Dibikin SOP ", "", "", "", "", "Tanggal dan Jam Input", ""],
-                ["id", "kodelokasi", "idunix", "tgl_bukubesar", "nokwt_awal", "nokwt_akhir", "jumlah_biaya", "bank", "tgl_bank", "waktu_bank", "pilihan_bank", "bukti_bank di relasikan ke gd mutasi bank", "jumlah_setor", "pegawai", "tgl_approve", "approve_by", "keterangan_dr_lokasi", "catatan", "gambar", "link_file", "updated_at", "created_at", "deleted_at"],
-                [328174, 106, "106-260402", "2026-04-02", "86101444-106", "86101444-106", 1800000, "TRANS", "2026-04-02", "11:15:00", "BCA", "BCA26kml3uH8", 1800000, "623022", "2026-04-06", "609061", "AISYAH NAIRA PUTRI", "", "", "106-260402/2026-04-02_925.jpg", "2026-04-06 10:55:39", "2026-04-02 19:49:21", ""],
-                ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-            ]
-        )
-        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, header=False)
-        workbook.seek(0)
-
         response = self.client.post(
-            "/branch-inputs/upload",
-            files={"excel_file": ("setoran-bank.xlsx", workbook.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            "/branch-inputs/new",
+            data={
+                "transaction_date": "2026-06-05", "branch_name": "Cabang Baru",
+                "customer_name": "Sampel", "amount_should_pay": "1000",
+                "amount_input_branch": "1000", "payment_method": "transfer", "invoice_code": "BLOCKED",
+            },
             follow_redirects=False,
         )
 
-        self.assertEqual(response.status_code, 303)
-        self.assertIn("imported=1", response.headers["location"])
-        self.assertIn("failed=0", response.headers["location"])
-        row = self.db.query(BranchInput).filter(BranchInput.invoice_code == "106-260402").one()
-        self.assertEqual(row.branch_name, "106")
-        self.assertEqual(row.customer_name, "AISYAH NAIRA PUTRI")
-        self.assertEqual(row.transaction_date.isoformat(), "2026-04-02")
-        self.assertEqual(row.source_created_at.strftime("%Y-%m-%d %H:%M"), "2026-04-02 19:49")
-        self.assertEqual(row.deposit_date.isoformat(), "2026-04-02")
-        self.assertEqual(row.source_row_number, 3)
-        self.assertEqual(self.db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).count(), 1)
-        self.assertIsNotNone(self.db.query(BranchInput).filter(BranchInput.invoice_code == "INV-PERSIST").one().archived_at)
+        self.assertEqual(response.status_code, 410)
+        self.assertIsNone(self.db.query(BranchInput).filter(BranchInput.invoice_code == "BLOCKED").first())
 
 
 if __name__ == "__main__":
