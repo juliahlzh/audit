@@ -22,7 +22,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import verify_password
 from .config import SESSION_SECRET
-from .database import Base, SessionLocal, engine, get_db
+from .database import Base, SessionLocal, engine, get_db, raw_database_url
 from .dependencies import get_current_user, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
@@ -210,7 +210,7 @@ def _run_schema_migrations() -> None:
 
 @app.on_event("startup")
 def startup_event():
-    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+    if (os.getenv("VERCEL") or os.getenv("VERCEL_ENV")) and not raw_database_url:
         return
     init_db()
 
