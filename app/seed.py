@@ -9,7 +9,7 @@ def seed_data(db: Session) -> None:
     if db.query(User).count() == 0:
         db.add_all(
             [
-                User(username="admin", full_name="Admin Keuangan", password_hash=hash_password("admin123"), role="admin"),
+                User(username="admin", full_name="Admin Pusat", password_hash=hash_password("admin123"), role="admin"),
                 User(username="auditor", full_name="Internal Auditor", password_hash=hash_password("auditor123"), role="auditor"),
                 User(username="viewer", full_name="Finance Viewer", password_hash=hash_password("viewer123"), role="viewer"),
             ]
@@ -18,7 +18,7 @@ def seed_data(db: Session) -> None:
 
     changed = False
     for username, region in REGIONAL_ACCOUNTS.items():
-        full_name = f"Viewer Wilayah {region}"
+        full_name = f"Admin Wilayah {region}"
         user = db.query(User).filter(User.username == username).first()
         if not user:
             db.add(User(username=username, full_name=full_name, password_hash=hash_password("wilayah123"), role="viewer", region=region))

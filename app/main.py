@@ -23,13 +23,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import verify_password
 from .config import SESSION_SECRET
 from .database import Base, SessionLocal, engine, get_db, raw_database_url
-from .dependencies import get_current_user, require_roles
+from .dependencies import get_current_user, require_central_admin, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
 from .services.analytics import build_global_region_ranking, build_monitoring_context, filter_options, filtered_results
 from .services.matching_engine import run_matching
-from .services.organization import ORGANIZATION_ROWS
+from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, resolve_location
 from .services.rule_config import RULE_CONFIG
 from .services.reports import build_excel_report, build_pdf_report, build_ranked_excel_report, summarize_by_location
 from .services.system_status import get_database_warning, get_system_status
@@ -171,6 +171,7 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("branch_inputs", "archived_at", "DATETIME", "TIMESTAMP")
     _add_column_if_missing("branch_inputs", "correction_reason", "TEXT")
     _add_column_if_missing("branch_inputs", "correction_notes", "TEXT")
+    _add_column_if_missing("branch_inputs", "location_code", "VARCHAR(10)")
     _add_column_if_missing("branch_inputs", "region", "VARCHAR(80) DEFAULT 'Belum Dipetakan'")
     _add_column_if_missing("branch_inputs", "area", "VARCHAR(100) DEFAULT 'Belum Dipetakan'")
     _add_column_if_missing("branch_inputs", "data_type", "VARCHAR(20) DEFAULT 'OPERASIONAL'")
@@ -179,14 +180,39 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
     with engine.begin() as conn:
-        for region, area, location in ORGANIZATION_ROWS:
+        for code, region, area, location in ORGANIZATION_CODE_ROWS:
             conn.execute(
                 text(
-                    "UPDATE branch_inputs SET region = :region, area = :area "
+                    "UPDATE branch_inputs SET location_code = :code, region = :region, area = :area "
                     "WHERE LOWER(TRIM(branch_name)) = LOWER(:location)"
                 ),
-                {"region": region, "area": area, "location": location.strip()},
+                {"code": code, "region": region, "area": area, "location": location.strip()},
             )
+            conn.execute(
+                text(
+                    "UPDATE branch_inputs SET location_code = :code, branch_name = :location, "
+                    "region = :region, area = :area "
+                    "WHERE TRIM(branch_name) = :code OR TRIM(branch_name) = :code_float "
+                    "OR TRIM(location_code) = :code"
+                ),
+                {
+                    "code": code,
+                    "code_float": f"{code}.0",
+                    "region": region,
+                    "area": area,
+                    "location": location.strip(),
+                },
+            )
+        for legacy_name, canonical_name in LOCATION_ALIASES.items():
+            code, location, region, area = resolve_location(canonical_name)
+            conn.execute(
+                text(
+                    "UPDATE branch_inputs SET location_code = :code, branch_name = :location, "
+                    "region = :region, area = :area WHERE LOWER(TRIM(branch_name)) = LOWER(:legacy)"
+                ),
+                {"code": code, "location": location, "region": region, "area": area, "legacy": legacy_name},
+            )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_inputs_location_code ON branch_inputs (location_code)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_inputs_area ON branch_inputs (area)"))
         conn.execute(
             text(
@@ -578,6 +604,8 @@ def info_page(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if user.region:
+        raise HTTPException(status_code=403, detail="Menu Info hanya tersedia untuk Admin Pusat")
     summary = _dashboard_summary(db, user.region or "")
     activity_query = db.query(AuditLog).filter(AuditLog.status.in_(["WARNING", "ALERT"]))
     if user.region:
@@ -604,9 +632,8 @@ def branch_inputs_page(
     page: int = 1,
     per_page: int = 20,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_central_admin),
 ):
-    return RedirectResponse("/reports", status_code=303)
     page = max(1, page)
     per_page = min(max(10, per_page), 100)
     query = db.query(BranchInput).filter(BranchInput.archived_at.is_(None))
@@ -642,59 +669,9 @@ def branch_inputs_page(
 
 @app.post("/branch-inputs/new")
 def create_branch_input(
-    transaction_date: str = Form(...),
-    branch_name: str = Form(...),
-    customer_name: str = Form(...),
-    amount_should_pay: float = Form(...),
-    amount_input_branch: float = Form(...),
-    payment_method: str = Form(...),
-    invoice_code: str = Form(...),
-    transaction_time: str = Form(""),
-    bank_date: str = Form(""),
-    deposit_date: str = Form(""),
-    payment_received_at: str = Form(""),
-    officer_id: str = Form(""),
-    deposit_officer_id: str = Form(""),
-    approver_id: str = Form(""),
-    approved_at: str = Form(""),
-    bank_target: str = Form(""),
-    proof_bank: str = Form(""),
-    destination_account: str = Form(""),
-    proof_reference: str = Form(""),
-    student_list: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles("admin", "auditor")),
+    _user: User = Depends(require_central_admin),
 ):
     return Response(status_code=410, content="Manual input sudah dinonaktifkan. Gunakan integrasi data terkontrol.")
-    row = BranchInput(
-        transaction_date=datetime.strptime(transaction_date, "%Y-%m-%d").date(),
-        branch_name=branch_name,
-        customer_name=customer_name,
-        amount_should_pay=amount_should_pay,
-        amount_input_branch=amount_input_branch,
-        payment_method=payment_method,
-        invoice_code=invoice_code,
-        transaction_time=transaction_time or None,
-        bank_date=datetime.strptime(bank_date, "%Y-%m-%d").date() if bank_date else None,
-        deposit_date=datetime.strptime(deposit_date, "%Y-%m-%d").date() if deposit_date else None,
-        payment_received_at=_to_datetime(payment_received_at) if payment_received_at else None,
-        officer_id=officer_id or None,
-        deposit_officer_id=deposit_officer_id or None,
-        approver_id=approver_id or None,
-        approved_at=_to_datetime(approved_at) if approved_at else None,
-        bank_target=bank_target or None,
-        proof_bank=proof_bank or None,
-        destination_account=destination_account or None,
-        proof_reference=proof_reference or None,
-        student_list=student_list or None,
-        notes=notes or None,
-    )
-    db.add(row)
-    db.commit()
-    run_matching(db)
-    add_log(db, "Input Cabang", f"Input cabang baru #{row.id} oleh {user.username}", user_id=user.id, status="INFO")
-    return RedirectResponse("/branch-inputs", status_code=303)
 
 
 @app.post("/branch-inputs/{branch_input_id}/delete")
@@ -702,7 +679,7 @@ def delete_branch_input(
     branch_input_id: int,
     correction_reason: str = Form("Koreksi data approval"),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("admin", "auditor")),
+    user: User = Depends(require_central_admin),
 ):
     deleted = archive_branch_input_with_results(db, branch_input_id, user_id=user.id, reason=correction_reason)
     if deleted:
@@ -717,7 +694,7 @@ def delete_branch_input(
 def delete_all_branch_inputs(
     correction_reason: str = Form("Koreksi semua data approval"),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("admin", "auditor")),
+    user: User = Depends(require_central_admin),
 ):
     deleted_count = archive_all_branch_inputs_with_results(db, user_id=user.id, reason=correction_reason)
     add_log(db, "Koreksi/Arsip Semua Data Approval", f"{deleted_count} data approval diarsipkan oleh {user.username}. Alasan: {correction_reason}", user_id=user.id, status="WARNING")
@@ -729,9 +706,8 @@ def upload_branch_input_excel(
     request: Request,
     excel_file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("admin", "auditor")),
+    user: User = Depends(require_central_admin),
 ):
-    return Response(status_code=410, content="Upload Excel melalui UI sudah dinonaktifkan.")
     try:
         df = _read_upload_dataframe(excel_file)
     except Exception:
@@ -793,10 +769,14 @@ def upload_branch_input_excel(
             amount_should = amount_input
 
         invoice_code = str(item.get(col_invoice) or "").strip()
-        branch_name = str(item.get(col_branch) or "").strip()
+        raw_location = str(item.get(col_branch) or "").strip()
+        location_code, branch_name, region, area = resolve_location(raw_location)
         customer_name = str(item.get(col_customer) or "").strip()
         if not invoice_code or not branch_name or not customer_name:
             failed_rows.append(f"Baris {line_no}: field wajib (cabang/customer/invoice) kosong.")
+            continue
+        if not location_code:
+            failed_rows.append(f"Baris {line_no}: kode lokasi SIL '{raw_location}' tidak dikenal.")
             continue
 
         payment_method = str(item.get(col_payment) or "transfer").strip().lower() if col_payment else "transfer"
@@ -824,7 +804,10 @@ def upload_branch_input_excel(
         inserted_rows.append(
             BranchInput(
                 transaction_date=trx_date,
+                location_code=location_code or None,
                 branch_name=branch_name,
+                region=region,
+                area=area,
                 customer_name=customer_name,
                 amount_should_pay=amount_should,
                 amount_input_branch=amount_input,
@@ -949,7 +932,10 @@ def alert_center(
     if min_score > 0:
         query = query.filter(MatchingResult.risk_score >= min_score)
     if branch:
-        query = query.filter(BranchInput.branch_name.ilike(f"%{branch}%"))
+        query = query.filter(
+            BranchInput.branch_name.ilike(f"%{branch}%")
+            | BranchInput.location_code.ilike(f"%{branch}%")
+        )
     if officer:
         query = query.filter(BranchInput.officer_id.ilike(f"%{officer}%"))
     if date_from:
@@ -1113,8 +1099,7 @@ def verify_report_result(
 
 
 @app.get("/templates/approval-import.xlsx")
-def download_template(user: User = Depends(get_current_user)):
-    return Response(status_code=410, content="Template upload UI sudah dinonaktifkan.")
+def download_template(user: User = Depends(require_central_admin)):
     import pandas as pd
 
     columns = [

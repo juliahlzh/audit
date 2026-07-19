@@ -24,3 +24,10 @@ def require_roles(*allowed_roles):
         return user
 
     return role_checker
+
+
+def require_central_admin(user: User = Depends(get_current_user)) -> User:
+    """Hak mutasi data FEWS hanya untuk Admin Pusat tanpa scope wilayah."""
+    if user.role != "admin" or user.region:
+        raise HTTPException(status_code=403, detail="Fitur ini hanya tersedia untuk Admin Pusat")
+    return user

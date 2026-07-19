@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -95,6 +95,7 @@ class BranchInput(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     transaction_date: Mapped[date] = mapped_column(Date, index=True)
+    location_code: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     branch_name: Mapped[str] = mapped_column(String(120), index=True)
     region: Mapped[str] = mapped_column(String(80), default="Belum Dipetakan", index=True)
     area: Mapped[str] = mapped_column(String(100), default="Belum Dipetakan", index=True)
@@ -127,6 +128,21 @@ class BranchInput(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     match_results: Mapped[list["MatchingResult"]] = relationship("MatchingResult", back_populates="branch_input")
+
+
+@event.listens_for(BranchInput, "before_insert")
+@event.listens_for(BranchInput, "before_update")
+def _map_branch_location(_mapper, _connection, target: BranchInput) -> None:
+    """Normalisasi kode lokasi SIL ke nama, wilayah, dan area master."""
+    from .services.organization import resolve_location
+
+    source = target.location_code or target.branch_name
+    code, location, region, area = resolve_location(source)
+    if code:
+        target.location_code = code
+        target.branch_name = location
+        target.region = region
+        target.area = area
 
 
 class BankMutation(Base):

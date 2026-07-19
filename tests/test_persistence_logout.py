@@ -106,16 +106,29 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertNotIn("Customer Persist", report_page.text)
         self.assertNotIn("<th>Customer</th>", report_page.text)
 
-    def test_upload_route_is_disabled(self):
+    def test_central_admin_can_upload_and_map_sil_location_code(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
+        csv_data = (
+            "tgl_bukubesar,kodelokasi,keterangan_dr_lokasi,jumlah_biaya,jumlah_setor,idunix,bank\n"
+            "2026-07-01,278,Customer Upload,1000,900,278-260701,transfer\n"
+        ).encode("utf-8")
         response = self.client.post(
             "/branch-inputs/upload",
-            files={"excel_file": ("mapping.xlsx", b"disabled", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            files={"excel_file": ("mapping.csv", csv_data, "text/csv")},
             follow_redirects=False,
         )
 
-        self.assertEqual(response.status_code, 410)
-        self.assertEqual(self.db.query(BranchInput).count(), 1)
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("imported=1", response.headers["location"])
+        active_rows = self.db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).all()
+        self.assertEqual(len(active_rows), 1)
+        self.assertEqual(active_rows[0].location_code, "278")
+        self.assertEqual(active_rows[0].branch_name, "Merduati")
+        self.assertEqual(active_rows[0].area, "Area Aceh")
+        self.assertEqual(active_rows[0].region, "Sumatera Bagian Utara")
+        self.assertIsNotNone(
+            self.db.query(BranchInput).filter(BranchInput.invoice_code == "INV-PERSIST").one().archived_at
+        )
 
     def test_manual_input_route_is_disabled(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)

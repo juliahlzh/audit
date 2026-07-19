@@ -2,8 +2,8 @@
 {% block content %}
 <div class="page-header">
     <div>
-        <h2>Upload Data Approval</h2>
-        <p class="muted">Upload satu file Excel approval, FEWS akan otomatis mendeteksi indikasi fraud.</p>
+        <h2>Upload Data FEWS Pusat</h2>
+        <p class="muted">Upload Excel atau CSV approval. Kode lokasi SIL akan dipetakan otomatis ke lokasi, area, dan wilayah.</p>
     </div>
 </div>
 
@@ -13,13 +13,12 @@
 </div>
 {% endif %}
 
-{% if user.role in ["admin", "auditor"] %}
 <div class="upload-shell">
     <div class="upload-copy">
         <h3>Upload Excel Approval</h3>
         <p>Gunakan file `.xlsx`, `.xls`, atau `.csv`. Format setoran bank asli dengan baris header `kodelokasi`, `idunix`, `tgl_bukubesar`, dan `created_at` didukung.</p>
         <div class="upload-checks">
-            <span>✓ 10+ alias header didukung</span>
+            <span>✓ Kode lokasi SIL divalidasi</span>
             <span>✓ Deteksi otomatis setelah upload</span>
             <span>✓ Data lama diarsipkan, bukan dihapus</span>
         </div>
@@ -36,41 +35,6 @@
         </form>
     </div>
 </div>
-
-<div class="panel">
-    <details>
-        <summary><strong>Input Manual (Opsional)</strong></summary>
-        <div class="details-body">
-            <form method="post" action="/branch-inputs/new">
-                <div class="grid two">
-                    <div><label>Tanggal transaksi</label><input type="date" name="transaction_date" required></div>
-                    <div><label>Nama cabang</label><input type="text" name="branch_name" required></div>
-                    <div><label>Nama customer</label><input type="text" name="customer_name" required></div>
-                    <div><label>Nominal harus bayar</label><input type="number" name="amount_should_pay" min="0" step="0.01" required></div>
-                    <div><label>Nominal input cabang</label><input type="number" name="amount_input_branch" min="0" step="0.01" required></div>
-                    <div><label>Metode pembayaran</label><select name="payment_method" required><option value="transfer">transfer</option><option value="tunai">tunai</option></select></div>
-                    <div><label>Kode unik / invoice</label><input type="text" name="invoice_code" required></div>
-                    <div><label>Tanggal bank (opsional)</label><input type="date" name="bank_date"></div>
-                    <div><label>Tanggal setoran (opsional)</label><input type="date" name="deposit_date"></div>
-                    <div><label>Waktu pembayaran diterima (opsional)</label><input type="datetime-local" name="payment_received_at"></div>
-                    <div><label>ID Petugas Input (opsional)</label><input type="text" name="officer_id"></div>
-                    <div><label>ID Petugas Setoran (opsional)</label><input type="text" name="deposit_officer_id"></div>
-                    <div><label>ID Approver (opsional)</label><input type="text" name="approver_id"></div>
-                    <div><label>Bank tujuan (opsional)</label><input type="text" name="bank_target"></div>
-                    <div><label>Bank pada bukti (opsional)</label><input type="text" name="proof_bank"></div>
-                    <div><label>Rekening penerimaan (opsional)</label><input type="text" name="destination_account"></div>
-                    <div><label>Nomor bukti transaksi (opsional)</label><input type="text" name="proof_reference"></div>
-                    <div><label>Daftar siswa setoran kolektif (opsional)</label><input type="text" name="student_list"></div>
-                    <div><label>Jam transaksi (opsional)</label><input type="text" name="transaction_time" placeholder="Contoh: 23:15"></div>
-                    <div><label>Waktu approve (opsional)</label><input type="datetime-local" name="approved_at"></div>
-                    <div><label>Keterangan</label><input type="text" name="notes"></div>
-                </div>
-                <button type="submit">Simpan Input Manual</button>
-            </form>
-        </div>
-    </details>
-</div>
-{% endif %}
 
 <div class="panel">
     <div class="section-heading">
@@ -102,13 +66,15 @@
         </div>
     </div>
     <div class="table-wrap"><table>
-        <thead><tr><th>ID</th><th>Tanggal</th><th>Cabang</th><th>Customer</th><th>Invoice</th><th>Nominal Input</th><th>Aksi</th></tr></thead>
+        <thead><tr><th>ID</th><th>Tanggal</th><th>Kode Lokasi</th><th>Lokasi</th><th>Area</th><th>Customer</th><th>Invoice</th><th>Nominal Input</th><th>Aksi</th></tr></thead>
         <tbody>
             {% for row in rows %}
             <tr>
                 <td>#{{ row.id }}</td>
                 <td>{{ row.transaction_date|date_id }}</td>
+                <td>{{ row.location_code or '—' }}</td>
                 <td>{{ row.branch_name }}</td>
+                <td>{{ row.area }}</td>
                 <td>{{ row.customer_name }}</td>
                 <td>{{ row.invoice_code }}</td>
                 <td>Rp {{ "{:,.0f}".format(row.amount_input_branch) }}</td>
@@ -124,7 +90,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7">Belum ada data approval.</td></tr>
+            <tr><td colspan="9">Belum ada data approval.</td></tr>
             {% endfor %}
         </tbody>
     </table></div>

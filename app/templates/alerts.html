@@ -121,7 +121,7 @@
                 {% if row.branch_input %}
                 <strong>{{ row.branch_input.customer_name }}</strong>
                 <span>Input: {{ row.branch_input.source_created_at|datetime_id if row.branch_input.source_created_at else '-' }}</span>
-                <span>Setor: {{ row.branch_input.deposit_date|date_id if row.branch_input.deposit_date else '-' }}</span><span>{{ row.branch_input.region }} › {{ row.branch_input.area }} › {{ row.branch_input.branch_name }}</span>
+                <span>Setor: {{ row.branch_input.deposit_date|date_id if row.branch_input.deposit_date else '-' }}</span><span>{{ row.branch_input.region }} › {{ row.branch_input.area }} › {{ row.branch_input.location_code or '—' }} — {{ row.branch_input.branch_name }}</span>
                 <span>Rp {{ "{:,.0f}".format(row.branch_input.amount_input_branch) }} | {{ row.branch_input.invoice_code }}</span>
                 {% if row.branch_input.officer_id %}
                 <span>Petugas: {{ row.branch_input.officer_id }}</span>

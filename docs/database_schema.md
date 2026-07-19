@@ -13,7 +13,10 @@
 
 - `id` integer primary key
 - `transaction_date`
+- `location_code` (kode lokasi SIL)
 - `branch_name`
+- `region`
+- `area`
 - `customer_name`
 - `amount_should_pay`
 - `amount_input_branch`

@@ -6,25 +6,27 @@ Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lo
 
 ## Navigasi dan hak akses
 
-- Admin/auditor: **Dashboard** dan **Laporan**.
-- Akun wilayah read-only: **Dashboard**, **Laporan**, dan **Alert Center**.
-- Satu akun dibuat untuk setiap 15 wilayah pada master organisasi.
+- **Admin Pusat**: Dashboard Pusat, Info, Laporan, Alert Center, dan Upload Data Excel.
+- **Admin Wilayah**: Dashboard Wilayah, Laporan, dan Alert Center dalam mode view-only.
+- Satu akun Admin Wilayah dibuat untuk setiap 15 wilayah pada master organisasi.
+- Admin Pusat dapat melihat seluruh wilayah dan menjadi satu-satunya tipe akun yang dapat mengunggah Excel approval ke FEWS.
+- Admin Wilayah tidak dapat upload, input manual, mengarsipkan data, mengubah verifikasi, atau mengubah tindak lanjut.
 - Detail KPI, grafik, laporan, temuan, ekspor, dan Alert Center akun wilayah hanya memuat data wilayah tersebut.
 - Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
-- Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini mengikuti pembatasan wilayah akun dan tidak mengembalikan upload/manual input yang sudah dinonaktifkan.
+- Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini hanya tersedia untuk Admin Pusat dan tidak mengembalikan input manual yang sudah dinonaktifkan.
 - Hanya admin/auditor yang dapat mengubah status verifikasi atau tindak lanjut.
 - Menu **Info** mempertahankan seluruh informasi monitoring dashboard lama dalam halaman terpisah.
-- Manual input dan upload Excel tidak tersedia di UI operasional.
+- Manual input tetap tidak tersedia. Upload Excel hanya tampil dan dapat dipakai oleh Admin Pusat.
 
 ## Master organisasi
 
-Sumber struktur adalah `D:\Audit\Wilayah, Area, dan Lokasi.pptx`:
+Sumber struktur area adalah `D:\Audit\Wilayah, Area, dan Lokasi.pptx`, dilengkapi daftar kode lokasi SIL terbaru:
 
 - 15 wilayah;
 - 41 area;
-- 165 cabang/lokasi belajar.
+- 166 cabang/lokasi belajar berkode SIL.
 
-Nama `Cabang Serang` pada baris Kramatwatu dinormalisasi sebagai `Area Serang` agar konsisten dengan rekap tiga area wilayah Banten. Master versi aplikasi disimpan di `app/services/organization.py` dan dipakai untuk akun, opsi filter, serta pemetaan lokasi.
+Nama `Cabang Serang` pada baris Kramatwatu dinormalisasi sebagai `Area Serang` agar konsisten dengan rekap tiga area wilayah Banten. Daftar kode SIL terbaru menjadi sumber identitas lokasi; `Graha Mustika Media` ditambahkan ke Area Kabupaten Bogor sehingga total master menjadi 166 lokasi. Master versi aplikasi disimpan di `app/services/organization.py` dan dipakai untuk akun, opsi filter, pemetaan lokasi/area, dashboard, dan export.
 
 ## Filter
 
@@ -45,7 +47,8 @@ Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanj
 
 - **Wilayah** menaungi satu atau lebih area.
 - **Area** menaungi satu atau lebih lokasi/cabang.
-- **Lokasi** memakai `branch_name`.
+- **Kode Lokasi** memakai kode numerik SIL dan disimpan di `location_code`.
+- **Lokasi** memakai nama kanonis `branch_name`; input berupa kode SIL otomatis dinormalisasi.
 - **Sudah Diverifikasi** berarti `follow_up_status = RESOLVED`.
 - **Belum Diverifikasi** berarti status selain `RESOLVED`.
 - Ranking menurun berdasarkan total skor, lalu high alert, need review, jumlah temuan, dan nama.
@@ -75,13 +78,13 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 
 ## Kriteria penerimaan
 
-- Master berisi tepat 15 wilayah, 41 area, dan 165 lokasi.
+- Master berisi tepat 15 wilayah, 41 area, dan 166 lokasi berkode SIL.
 - Semua akun wilayah dibuat idempoten dengan role `viewer` dan wilayah terkunci.
 - Akun wilayah hanya melihat detail wilayahnya pada Dashboard, Laporan, ekspor, dan Alert Center.
 - Ranking nasional tetap terlihat pada Dashboard akun wilayah.
 - Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
-- Admin melihat Dashboard/Info/Laporan pada navigasi; akun wilayah juga melihat Alert Center.
-- Tidak ada tombol/form upload atau manual input pada UI.
+- Admin Pusat melihat Dashboard/Info/Laporan/Alert Center/Upload Data; Admin Wilayah hanya melihat Dashboard/Laporan/Alert Center.
+- Form upload hanya tersedia bagi Admin Pusat; tidak ada form input manual untuk akun mana pun.
 - Filter area memengaruhi data secara nyata.
 - Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
 - Grafik garis, grafik indikator/lokasi, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.

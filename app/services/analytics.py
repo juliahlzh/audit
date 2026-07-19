@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..models import BranchInput, MatchingResult, User
 from .rule_config import RULE_CONFIG
-from .organization import REGIONS, areas_for_region, locations_for_scope, scope_for_location
+from .organization import REGIONS, areas_for_region, location_code_for_name, locations_for_scope, resolve_location, scope_for_location
 
 
 MONTH_NAMES_ID = [
@@ -90,7 +90,8 @@ def filtered_results(
     if area:
         query = query.filter(BranchInput.area == area)
     if location:
-        query = query.filter(BranchInput.branch_name == location)
+        code, normalized_location, _, _ = resolve_location(location)
+        query = query.filter(BranchInput.branch_name == (normalized_location if code else location))
     if indicator:
         query = query.filter(MatchingResult.triggered_rules.ilike(f"%{indicator}%"))
     if verification == "sudah":
@@ -124,7 +125,7 @@ def _risk_label(max_score: int) -> str:
 def summarize_rankings(results, group_by: str):
     grouped = defaultdict(
         lambda: {
-            "name": "-", "region": "-", "area": "-", "total": 0, "high": 0, "medium": 0,
+            "name": "-", "code": "", "region": "-", "area": "-", "total": 0, "high": 0, "medium": 0,
             "low": 0, "score_total": 0, "max_score": 0, "verified": 0,
             "unverified": 0, "indicators": Counter(), "latest_date": None,
         }
@@ -136,6 +137,7 @@ def summarize_rankings(results, group_by: str):
         key = branch.region if group_by == "region" else f"{branch.region}|{branch.area}|{branch.branch_name}"
         row = grouped[key]
         row["name"] = branch.region if group_by == "region" else branch.branch_name
+        row["code"] = "" if group_by == "region" else (branch.location_code or location_code_for_name(branch.branch_name))
         row["region"] = branch.region
         row["area"] = branch.area
         row["total"] += 1
@@ -259,14 +261,29 @@ def filter_options(db: Session, user: User, selected_region: str = "", selected_
         and (not selected_area or row_area == selected_area)
     }
     locations = sorted(set(locations_for_scope(effective_region, selected_area)) | data_locations)
+    location_labels = {
+        location: f"{location_code_for_name(location)} — {location}" if location_code_for_name(location) else location
+        for location in locations
+    }
     indicators = [
         {"code": code, "name": rule["name"]}
         for code, rule in RULE_CONFIG["rules"].items()
     ]
-    return {"regions": regions, "areas": areas, "locations": locations, "indicators": indicators}
+    return {
+        "regions": regions,
+        "areas": areas,
+        "locations": locations,
+        "location_labels": location_labels,
+        "indicators": indicators,
+    }
 
 
 def build_monitoring_context(db: Session, user: User, filters: dict):
+    filters = dict(filters)
+    if filters.get("location"):
+        code, normalized_location, _, _ = resolve_location(filters["location"])
+        if code:
+            filters["location"] = normalized_location
     scoped = filtered_results(db, user, **filters)
     for result in scoped:
         result.indicator_names = _rule_names(result)
@@ -304,7 +321,11 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         "top_location_rows": location_rows[:10],
         "bottom_location_rows": list(reversed(location_rows[-10:])),
         "location_chart_rows": [
-            {"name": row["name"], "score_total": row["score_total"], "total": row["total"]}
+            {
+                "name": f"{row['code']} — {row['name']}" if row.get("code") else row["name"],
+                "score_total": row["score_total"],
+                "total": row["total"],
+            }
             for row in location_rows[:10]
         ],
         "trend": trend,

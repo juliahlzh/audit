@@ -7,7 +7,7 @@ from datetime import date, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, inspect
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -161,8 +161,9 @@ class QueryPerformanceTests(unittest.TestCase):
     def test_branch_inputs_page_is_paginated(self):
         response = self.client.get("/branch-inputs", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 303)
-        self.assertEqual(response.headers["location"], "/reports")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Upload Data FEWS Pusat", response.text)
+        self.assertIn("1 / 2", response.text)
 
     def test_responses_include_server_timing_header(self):
         response = self.client.get("/dashboard")
@@ -172,6 +173,13 @@ class QueryPerformanceTests(unittest.TestCase):
         self.assertRegex(response.headers.get("x-fews-response-time-ms", ""), r"^\d+\.\d$")
 
     def test_performance_indexes_are_created_idempotently(self):
+        with self.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE branch_inputs SET branch_name = '278.0', location_code = NULL, "
+                    "region = 'Belum Dipetakan', area = 'Belum Dipetakan' WHERE invoice_code = 'INV-0'"
+                )
+            )
         original_engine = main_module.engine
         main_module.engine = self.engine
         try:
@@ -184,7 +192,19 @@ class QueryPerformanceTests(unittest.TestCase):
         result_indexes = {item["name"] for item in inspect(self.engine).get_indexes("matching_results")}
         self.assertIn("ix_branch_inputs_active_transaction", branch_indexes)
         self.assertIn("ix_branch_inputs_source_created_at", branch_indexes)
+        self.assertIn("ix_branch_inputs_location_code", branch_indexes)
         self.assertIn("ix_matching_results_risk_updated", result_indexes)
+        with self.engine.connect() as connection:
+            mapped = connection.execute(
+                text(
+                    "SELECT location_code, branch_name, region, area "
+                    "FROM branch_inputs WHERE invoice_code = 'INV-0'"
+                )
+            ).one()
+        self.assertEqual(
+            tuple(mapped),
+            ("278", "Merduati", "Sumatera Bagian Utara", "Area Aceh"),
+        )
 
     def test_migration_script_runs_from_project_root(self):
         environment = os.environ.copy()

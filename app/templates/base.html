@@ -9,6 +9,7 @@
 <body>
     <div class="layout">
         <aside class="sidebar">
+            <button class="sidebar-close" type="button" aria-label="Tutup navigasi">×</button>
             <div class="brand-block">
                 <div><h1>FEWS</h1><p>Fraud Early Warning System</p></div>
             </div>
@@ -17,15 +18,20 @@
                 <a href="/dashboard" data-nav="/dashboard">
                     <span class="nav-icon" aria-hidden="true">▦</span>Dashboard
                 </a>
+                {% if not user.region %}
                 <a href="/info" data-nav="/info">
                     <span class="nav-icon" aria-hidden="true">i</span>Info
                 </a>
+                {% endif %}
                 <a href="/reports" data-nav="/reports">
                     <span class="nav-icon" aria-hidden="true">≡</span>Laporan
                 </a>
-                {% if user.region %}
                 <a href="/alerts" data-nav="/alerts">
                     <span class="nav-icon" aria-hidden="true">!</span>Alert Center
+                </a>
+                {% if user.role == 'admin' and not user.region %}
+                <a href="/branch-inputs" data-nav="/branch-inputs">
+                    <span class="nav-icon" aria-hidden="true">↑</span>Upload Data
                 </a>
                 {% endif %}
                 <a href="/logout" class="nav-exit"><span class="nav-icon" aria-hidden="true">→</span>Logout</a>
@@ -40,7 +46,7 @@
             {% if user %}
             <header class="topbar monitoring-topbar">
                 <button class="sidebar-toggle" type="button" aria-label="Buka navigasi">☰</button>
-                <div class="topbar-title"><span>Monitoring Approval</span><strong>{{ user.region or 'Nasional' }}</strong></div>
+                <div class="topbar-title"><span>{{ 'Dashboard Admin Wilayah' if user.region else ('Dashboard Admin Pusat' if user.role == 'admin' else 'Dashboard Monitoring') }}</span><strong>{{ user.region or 'Nasional' }}</strong></div>
             </header>
             {% endif %}
             {% block content %}{% endblock %}
@@ -53,7 +59,11 @@
             const target = item.getAttribute("data-nav");
             if (currentPath === target || currentPath.startsWith(target + "/")) item.classList.add("active");
         });
-        document.querySelector(".sidebar-toggle")?.addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
+        document.querySelector(".sidebar-toggle")?.addEventListener("click", () => document.body.classList.add("sidebar-open"));
+        document.querySelector(".sidebar-close")?.addEventListener("click", () => document.body.classList.remove("sidebar-open"));
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") document.body.classList.remove("sidebar-open");
+        });
     </script>
 </body>
 </html>

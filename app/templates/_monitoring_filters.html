@@ -13,7 +13,7 @@
     </div>
     <div class="filter-field">
         <label for="location">Lokasi</label>
-        <select id="location" name="location"><option value="">Semua Lokasi</option>{% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+        <select id="location" name="location"><option value="">Semua Lokasi</option>{% for item in filter_options.locations %}<option value="{{ item }}" {% if filters.location == item %}selected{% endif %}>{{ filter_options.location_labels.get(item, item) }}</option>{% endfor %}</select>
     </div>
     <div class="filter-field">
         <label for="period_type">Jenis Periode</label>

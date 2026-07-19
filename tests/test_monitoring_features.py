@@ -16,7 +16,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import BranchInput, MatchingResult, User
 from app.services.analytics import build_monitoring_context
-from app.services.organization import ORGANIZATION_ROWS, REGIONAL_ACCOUNTS
+from app.services.organization import ORGANIZATION_CODE_ROWS, ORGANIZATION_ROWS, REGIONAL_ACCOUNTS, resolve_location
 from app.services.reports import build_ranked_excel_report
 from app.services.sample_loader import load_sample_file
 
@@ -39,7 +39,7 @@ class MonitoringFeatureTests(unittest.TestCase):
             follow_up="RESOLVED", code="amount_mismatch", name="Jumlah biaya tidak sesuai jumlah setor",
         )
         self.jtg_result = self._add_result(
-            region="Jawa Tengah", location="Semarang", invoice="JTG-1", score=4,
+            region="Jawa Tengah", location="Semarang Uji", invoice="JTG-1", score=4,
             follow_up="OPEN", code="late_input_transfer", name="Keterlambatan input data setor transfer",
         )
         self.db.commit()
@@ -87,9 +87,11 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn('href="/dashboard"', response.text)
         self.assertIn('href="/info"', response.text)
         self.assertIn('href="/reports"', response.text)
-        self.assertNotIn('href="/branch-inputs"', response.text)
-        self.assertNotIn('href="/alerts"', response.text)
-        self.assertNotIn("Upload Data", response.text)
+        self.assertIn('href="/branch-inputs"', response.text)
+        self.assertIn('href="/alerts"', response.text)
+        self.assertIn("Upload Data", response.text)
+        self.assertIn("Dashboard Pusat FEWS", response.text)
+        self.assertIn('action="/branch-inputs/upload"', response.text)
         self.assertNotIn("legacy-info", response.text)
 
     def test_info_page_contains_complete_legacy_dashboard_information(self):
@@ -107,9 +109,9 @@ class MonitoringFeatureTests(unittest.TestCase):
         ]:
             self.assertIn(heading, response.text)
         self.assertIn("H+2 hari kerja dari tanggal bank", response.text)
-        self.assertNotIn("Upload Data", response.text)
+        self.assertIn("Upload Data", response.text)
 
-    def test_region_account_info_is_scoped_to_its_region(self):
+    def test_region_account_cannot_open_central_info(self):
         self._add_result(
             region="Jawa Tengah", location="Solo", invoice="JTG-HIGH", score=9,
             follow_up="OPEN", code="amount_mismatch", name="Jumlah biaya tidak sesuai jumlah setor",
@@ -119,29 +121,62 @@ class MonitoringFeatureTests(unittest.TestCase):
 
         response = self.client.get("/info")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("JBR-1", response.text)
-        self.assertNotIn("JTG-HIGH", response.text)
-        self.assertIn("cakupan Jawa Barat", response.text)
+        self.assertEqual(response.status_code, 403)
 
     def test_region_account_has_read_only_alert_center_and_scoped_data(self):
         self._login("jabar2")
         dashboard = self.client.get("/dashboard")
         alerts = self.client.get("/alerts")
+        upload_page = self.client.get("/branch-inputs")
+        upload_post = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("data.csv", b"invalid", "text/csv")},
+        )
         own_denied = self.client.post(f"/reports/{self.jbr_result.id}/verify", data={"notes": "Tidak boleh"})
 
         self.assertIn('href="/alerts"', dashboard.text)
+        self.assertIn('aria-label="Tutup navigasi"', dashboard.text)
+        self.assertNotIn('href="/info"', dashboard.text)
+        self.assertNotIn('href="/branch-inputs"', dashboard.text)
+        self.assertNotIn('action="/branch-inputs/upload"', dashboard.text)
+        self.assertIn("Dashboard Wilayah Jawa Barat", dashboard.text)
         self.assertIn("Jawa Tengah", dashboard.text)
         self.assertNotIn("JTG-1", dashboard.text)
         self.assertIn("JBR-1", alerts.text)
         self.assertNotIn("JTG-1", alerts.text)
         self.assertIn("Mode lihat saja", alerts.text)
+        self.assertEqual(upload_page.status_code, 403)
+        self.assertEqual(upload_post.status_code, 403)
         self.assertEqual(own_denied.status_code, 403)
 
     def test_organization_master_matches_source_deck(self):
         self.assertEqual(len(REGIONAL_ACCOUNTS), 15)
-        self.assertEqual(len(ORGANIZATION_ROWS), 165)
+        self.assertEqual(len(ORGANIZATION_ROWS), 166)
         self.assertEqual(len({area for _, area, _ in ORGANIZATION_ROWS}), 41)
+        self.assertEqual(len(ORGANIZATION_CODE_ROWS), 166)
+        self.assertEqual(len({code for code, _, _, _ in ORGANIZATION_CODE_ROWS}), 166)
+
+    def test_sil_location_code_maps_name_region_and_area(self):
+        self.assertEqual(
+            resolve_location("278"),
+            ("278", "Merduati", "Sumatera Bagian Utara", "Area Aceh"),
+        )
+        self.assertEqual(
+            resolve_location(223),
+            ("223", "Graha Mustika Media", "Bekasi Plus", "Area Kabupaten Bogor"),
+        )
+
+        branch = BranchInput(
+            transaction_date=date(2026, 7, 1), branch_name="278", customer_name="DATA UJI",
+            amount_should_pay=100_000, amount_input_branch=100_000, payment_method="transfer",
+            invoice_code="SIL-278",
+        )
+        self.db.add(branch)
+        self.db.flush()
+        self.assertEqual(branch.location_code, "278")
+        self.assertEqual(branch.branch_name, "Merduati")
+        self.assertEqual(branch.region, "Sumatera Bagian Utara")
+        self.assertEqual(branch.area, "Area Aceh")
 
     def test_region_and_verification_filters_change_dashboard(self):
         self._login("admin2")
@@ -150,6 +185,22 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn("JBR-1", response.text)
         self.assertNotIn("JTG-1", response.text)
         self.assertIn("Sudah Diverifikasi", response.text)
+
+    def test_dashboard_accepts_sil_code_as_location_filter(self):
+        mapped = self._add_result(
+            region="Belum Dipetakan", location="278", invoice="SIL-FILTER-278", score=8,
+            follow_up="OPEN", code="amount_mismatch", name="Jumlah biaya tidak sesuai jumlah setor",
+        )
+        self.db.commit()
+        self._login("admin2")
+
+        response = self.client.get("/dashboard?location=278&month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("SIL-FILTER-278", response.text)
+        self.assertEqual(mapped.branch_input.location_code, "278")
+        self.assertEqual(mapped.branch_input.area, "Area Aceh")
+        self.assertIn('value="Merduati" selected', response.text)
 
     def test_weekly_period_filters_dashboard_and_shows_complete_fews_sections(self):
         self._add_result(
@@ -196,14 +247,14 @@ class MonitoringFeatureTests(unittest.TestCase):
             self.db, self.admin,
             {"region": "", "area": "", "location": "", "month": "2026-06", "indicator": "", "verification": ""},
         )
-        self.assertEqual([row["name"] for row in context["location_rows"]], ["Bandung", "Semarang"])
+        self.assertEqual([row["name"] for row in context["location_rows"]], ["Bandung", "Semarang Uji"])
 
         payload = build_ranked_excel_report(context["location_rows"], context["filters"])
         sheet = load_workbook(BytesIO(payload))["Ranking Lokasi"]
         self.assertEqual(sheet["A5"].value, "Peringkat")
-        self.assertEqual(sheet["D6"].value, "Bandung")
-        self.assertEqual(sheet["D7"].value, "Semarang")
-        self.assertEqual(sheet.tables["RankingLokasiFEWS"].ref, "A5:N7")
+        self.assertEqual(sheet["E6"].value, "Bandung")
+        self.assertEqual(sheet["E7"].value, "Semarang Uji")
+        self.assertEqual(sheet.tables["RankingLokasiFEWS"].ref, "A5:O7")
 
         complete_payload = build_ranked_excel_report(
             context["location_rows"], context["filters"], detail_rows=context["detail_rows"],
@@ -215,7 +266,8 @@ class MonitoringFeatureTests(unittest.TestCase):
             ["Ranking Lokasi", "10 Terparah", "10 Terendah", "Detail Temuan", "Tren Periode", "Grafik Indikator", "Grafik Lokasi"],
         )
         self.assertEqual(workbook["Detail Temuan"]["A1"].value, "ID Unix")
-        self.assertEqual(workbook["Detail Temuan"]["G1"].value, "Jumlah Kesalahan")
+        self.assertEqual(workbook["Detail Temuan"]["E1"].value, "Kode Lokasi")
+        self.assertEqual(workbook["Detail Temuan"]["H1"].value, "Jumlah Kesalahan")
         self.assertIsNone(workbook["Ranking Lokasi"].auto_filter.ref)
         self.assertIsNone(workbook["10 Terparah"].auto_filter.ref)
         self.assertIsNone(workbook["Detail Temuan"].auto_filter.ref)
@@ -300,6 +352,8 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(len(loaded), 8)
         self.assertTrue(all(row.data_type == "UJI" for row in loaded))
         self.assertTrue(all("SINTETIS" in row.customer_name for row in loaded))
+        self.assertTrue(all(row.location_code for row in loaded))
+        self.assertTrue(all(row.area != "Belum Dipetakan" for row in loaded))
 
 
 if __name__ == "__main__":

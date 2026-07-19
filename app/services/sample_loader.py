@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..models import BranchInput, MatchingResult
 from .matching_engine import run_matching
-from .organization import scope_for_location
+from .organization import resolve_location
 
 
 def _as_bool(value: str) -> bool:
@@ -25,16 +25,17 @@ def load_sample_file(db: Session, csv_path: Path) -> dict:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             invoice_code = row["invoice_code"].strip()
-            _, inferred_area = scope_for_location(row["location"])
+            location_code, location_name, inferred_region, inferred_area = resolve_location(row["location"])
             sample_verification[invoice_code] = _as_bool(row.get("verified", "false"))
             if db.query(BranchInput.id).filter(BranchInput.invoice_code == invoice_code).first():
                 continue
             db.add(
                 BranchInput(
                     transaction_date=date.fromisoformat(row["transaction_date"]),
-                    region=row["region"].strip(),
+                    location_code=location_code or None,
+                    region=row["region"].strip() or inferred_region,
                     area=row.get("area", "").strip() or inferred_area,
-                    branch_name=row["location"].strip(),
+                    branch_name=location_name,
                     customer_name="DATA SINTETIS — BUKAN DATA PRODUKSI",
                     amount_should_pay=float(row["amount_should_pay"]),
                     amount_input_branch=float(row["amount_input_branch"]),

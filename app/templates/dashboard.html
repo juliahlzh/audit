@@ -1,8 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header monitoring-header">
-    <div><h2>Dashboard Ranking Wilayah</h2><p class="muted">Prioritas risiko per periode berdasarkan SOP FEWS terbaru.</p></div>
+    <div><h2>{{ 'Dashboard Wilayah ' ~ user.region if user.region else 'Dashboard Pusat FEWS' }}</h2><p class="muted">{{ 'View-only untuk wilayah akun; ranking nasional tetap tersedia.' if user.region else 'Monitoring nasional, pengelolaan data, dan prioritas risiko FEWS.' }}</p></div>
 </div>
+
+{% if user.role == 'admin' and not user.region %}
+<section class="monitor-panel central-upload-panel">
+    <div class="central-upload-copy">
+        <h3>Upload Excel ke FEWS</h3>
+        <p>Unggah data approval SIL. Kode lokasi akan otomatis dipetakan ke nama lokasi, area, dan wilayah.</p>
+        <small>Upload baru menggantikan dataset aktif; data sebelumnya tetap diarsipkan untuk jejak audit.</small>
+    </div>
+    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="central-upload-form">
+        <label class="file-drop compact-file-drop">
+            <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+            <strong>Pilih file Excel/CSV</strong>
+            <span class="file-hint">Format SIL dengan kolom kodelokasi dan idunix didukung</span>
+        </label>
+        <div class="central-upload-actions">
+            <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template</a>
+            <button type="submit">Upload &amp; Proses</button>
+        </div>
+    </form>
+</section>
+{% endif %}
 
 {% set filter_action = '/dashboard' %}
 {% include '_monitoring_filters.html' %}
@@ -30,8 +51,8 @@
 <section class="monitor-panel finding-table-panel">
     <div class="monitor-panel-heading"><div><h3>Detail Temuan FEWS</h3><p>ID Unix, kesalahan, jumlah kesalahan, skor, dan status verifikasi.</p></div><a href="/reports">Buka laporan</a></div>
     <div class="table-wrap"><table class="wide-table detail-fews-table">
-        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
-        <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="9">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Kode Lokasi</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
+        <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td><strong>{{ row.branch_input.location_code or '—' }}</strong></td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="10">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if total > recent_rows|length %}<p class="table-note">Menampilkan {{ recent_rows|length }} temuan terbaru. Seluruh detail tersedia pada menu Laporan dan export wilayah.</p>{% endif %}
 </section>

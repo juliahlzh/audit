@@ -82,13 +82,13 @@
     <section class="panel">
         <h3>Transaksi Prioritas Investigasi</h3>
         <div class="table-wrap"><table>
-            <thead><tr><th>ID Unix</th><th>Wilayah</th><th>Lokasi</th><th>Status</th><th>Skor</th><th>Indikator</th></tr></thead>
+            <thead><tr><th>ID Unix</th><th>Wilayah</th><th>Area</th><th>Kode Lokasi</th><th>Lokasi</th><th>Status</th><th>Skor</th><th>Indikator</th></tr></thead>
             <tbody>
                 {% for row in suspicious_results %}
                 <tr class="risk-{{ row.status|lower|replace(' ', '-') }}">
-                    <td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.status }}</td><td>{{ row.risk_score }} ({{ row.risk_level }})</td><td>{{ row.mismatch_type }}</td>
+                    <td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td>{{ row.branch_input.location_code or '—' }}</td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.status }}</td><td>{{ row.risk_score }} ({{ row.risk_level }})</td><td>{{ row.mismatch_type }}</td>
                 </tr>
-                {% else %}<tr><td colspan="6">Belum ada high alert.</td></tr>{% endfor %}
+                {% else %}<tr><td colspan="8">Belum ada high alert.</td></tr>{% endfor %}
             </tbody>
         </table></div>
     </section>

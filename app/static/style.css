@@ -629,6 +629,59 @@ tbody tr:hover {
     color: var(--muted);
 }
 
+.sidebar-close {
+    display: none;
+}
+
+.central-upload-panel {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.2fr);
+    gap: 24px;
+    align-items: center;
+    margin-bottom: 18px;
+    border-top: 3px solid var(--accent);
+}
+
+.central-upload-copy {
+    display: grid;
+    gap: 6px;
+}
+
+.central-upload-copy h3,
+.central-upload-copy p {
+    margin: 0;
+}
+
+.central-upload-copy p,
+.central-upload-copy small {
+    color: var(--muted);
+}
+
+.central-upload-form {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.compact-file-drop {
+    min-height: 96px;
+    padding: 14px 18px;
+}
+
+.central-upload-actions {
+    display: grid;
+    gap: 8px;
+    align-content: center;
+}
+
+.central-upload-actions .secondary-button,
+.central-upload-actions button {
+    justify-content: center;
+    margin: 0;
+    white-space: nowrap;
+}
+
 .upload-checks {
     display: grid;
     gap: 8px;
@@ -1348,6 +1401,23 @@ details[open] > .disclosure-summary .toggle-label::after {
         transform: translateX(0);
     }
 
+    .sidebar-close {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        display: inline-grid;
+        width: 34px;
+        min-height: 34px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 9px;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+        font-size: 1.3rem;
+        line-height: 1;
+    }
+
     .sidebar-toggle {
         display: inline-flex;
         align-items: center;
@@ -1369,6 +1439,8 @@ details[open] > .disclosure-summary .toggle-label::after {
     .grid.three,
     .grid.four,
     .upload-shell,
+    .central-upload-panel,
+    .central-upload-form,
     .filter-grid {
         grid-template-columns: 1fr;
     }

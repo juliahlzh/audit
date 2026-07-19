@@ -146,6 +146,7 @@ def _detail_row(result) -> list:
         branch.transaction_date.strftime("%d/%m/%Y"),
         branch.region,
         branch.area,
+        branch.location_code or "",
         branch.branch_name,
         "; ".join(names) or "Tidak ada indikator",
         len(names),
@@ -181,7 +182,7 @@ def build_ranked_excel_report(
     sheet.append(["Laporan Ranking FEWS"])
     sheet["A1"].font = Font(size=16, bold=True, color="FFFFFF")
     sheet["A1"].fill = PatternFill("solid", fgColor="0B2B4C")
-    sheet.merge_cells("A1:N1")
+    sheet.merge_cells("A1:O1")
     sheet.append(["Dibuat", datetime.now().strftime("%d/%m/%Y %H:%M")])
     sheet.append([
         "Filter",
@@ -196,21 +197,21 @@ def build_ranked_excel_report(
     ])
     sheet.append([])
     headers = [
-        "Peringkat", "Wilayah", "Area", "Lokasi", "Total Temuan", "High Alert", "Need Review",
+        "Peringkat", "Wilayah", "Area", "Kode Lokasi", "Lokasi", "Total Temuan", "High Alert", "Need Review",
         "Risiko Rendah", "Total Skor", "Skor Tertinggi", "Rata-rata Skor", "Tingkat Risiko",
         "Sudah Diverifikasi", "Belum Diverifikasi",
     ]
     sheet.append(headers)
     for row in location_rows:
         sheet.append([
-            row["rank"], row["region"], row["area"], row["name"], row["total"], row["high"], row["medium"],
+            row["rank"], row["region"], row["area"], row.get("code", ""), row["name"], row["total"], row["high"], row["medium"],
             row["low"], row["score_total"], row["max_score"], row["avg_score"], row["risk_label"],
             row["verified"], row["unverified"],
         ])
 
     header_row = 5
     if location_rows:
-        table = Table(displayName="RankingLokasiFEWS", ref=f"A{header_row}:N{sheet.max_row}")
+        table = Table(displayName="RankingLokasiFEWS", ref=f"A{header_row}:O{sheet.max_row}")
         table.tableStyleInfo = TableStyleInfo(
             name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False,
             showRowStripes=True, showColumnStripes=False,
@@ -222,8 +223,8 @@ def build_ranked_excel_report(
         cell.alignment = Alignment(horizontal="center", vertical="center")
     sheet.freeze_panes = "A6"
     if not location_rows:
-        sheet.auto_filter.ref = f"A{header_row}:N{header_row}"
-    widths = [12, 22, 24, 22, 15, 12, 14, 14, 13, 15, 16, 16, 20, 22]
+        sheet.auto_filter.ref = f"A{header_row}:O{header_row}"
+    widths = [12, 22, 24, 14, 22, 15, 12, 14, 14, 13, 15, 16, 16, 20, 22]
     for index, width in enumerate(widths, start=1):
         sheet.column_dimensions[get_column_letter(index)].width = width
     sheet.sheet_view.showGridLines = False
@@ -233,7 +234,7 @@ def build_ranked_excel_report(
         target.append(headers)
         for row in rows:
             target.append([
-                row["rank"], row["region"], row["area"], row["name"], row["total"], row["high"],
+                row["rank"], row["region"], row["area"], row.get("code", ""), row["name"], row["total"], row["high"],
                 row["medium"], row["low"], row["score_total"], row["max_score"], row["avg_score"],
                 row["risk_label"], row["verified"], row["unverified"],
             ])
@@ -241,11 +242,11 @@ def build_ranked_excel_report(
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="145DA0")
         if rows:
-            table = Table(displayName=table_name, ref=f"A1:N{target.max_row}")
+            table = Table(displayName=table_name, ref=f"A1:O{target.max_row}")
             table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
             target.add_table(table)
         else:
-            target.auto_filter.ref = "A1:N1"
+            target.auto_filter.ref = "A1:O1"
         target.freeze_panes = "A2"
         target.sheet_view.showGridLines = False
         for index, width in enumerate(widths, start=1):
@@ -256,7 +257,7 @@ def build_ranked_excel_report(
 
     detail = workbook.create_sheet("Detail Temuan")
     detail_headers = [
-        "ID Unix", "Tanggal", "Wilayah", "Area", "Lokasi", "Kesalahan",
+        "ID Unix", "Tanggal", "Wilayah", "Area", "Kode Lokasi", "Lokasi", "Kesalahan",
         "Jumlah Kesalahan", "Skor", "Tipe Data", "Status Verifikasi",
     ]
     detail.append(detail_headers)
@@ -267,13 +268,13 @@ def build_ranked_excel_report(
         cell.fill = PatternFill("solid", fgColor="145DA0")
         cell.alignment = Alignment(horizontal="center", vertical="center")
     if detail_rows:
-        table = Table(displayName="DetailTemuanFEWS", ref=f"A1:J{detail.max_row}")
+        table = Table(displayName="DetailTemuanFEWS", ref=f"A1:K{detail.max_row}")
         table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
         detail.add_table(table)
     else:
-        detail.auto_filter.ref = "A1:J1"
+        detail.auto_filter.ref = "A1:K1"
     detail.freeze_panes = "A2"
-    for index, width in enumerate([18, 13, 22, 24, 22, 48, 18, 10, 14, 22], start=1):
+    for index, width in enumerate([18, 13, 22, 24, 14, 22, 48, 18, 10, 14, 22], start=1):
         detail.column_dimensions[get_column_letter(index)].width = width
     detail.sheet_view.showGridLines = False
 
@@ -327,7 +328,8 @@ def build_ranked_excel_report(
     location_sheet = workbook.create_sheet("Grafik Lokasi")
     location_sheet.append(["Lokasi", "Total Skor", "Jumlah Temuan"])
     for row in location_rows[:10]:
-        location_sheet.append([row["name"], row["score_total"], row["total"]])
+        label = f"{row.get('code')} - {row['name']}" if row.get("code") else row["name"]
+        location_sheet.append([label, row["score_total"], row["total"]])
     if location_sheet.max_row > 1:
         chart = BarChart()
         chart.type = "bar"
@@ -420,15 +422,15 @@ def build_pdf_report(
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#eef4f8")]),
     ])
 
-    ranking_headers = ["Rank", "Wilayah", "Area", "Lokasi", "Temuan", "Skor", "Skor Max", "Risiko", "Sudah", "Belum"]
+    ranking_headers = ["Rank", "Wilayah", "Area", "Kode", "Lokasi", "Temuan", "Skor", "Skor Max", "Risiko", "Sudah", "Belum"]
     def ranking_table(rows):
         data = [ranking_headers]
         for row in rows:
             data.append([
-                row["rank"], row["region"], row["area"], row["name"], row["total"], row["score_total"],
+                row["rank"], row["region"], row["area"], row.get("code", ""), row["name"], row["total"], row["score_total"],
                 row["max_score"], row["risk_label"], row["verified"], row["unverified"],
             ])
-        table = Table(data, repeatRows=1, colWidths=[12*mm, 27*mm, 32*mm, 31*mm, 16*mm, 16*mm, 18*mm, 18*mm, 16*mm, 16*mm])
+        table = Table(data, repeatRows=1, colWidths=[12*mm, 27*mm, 30*mm, 14*mm, 30*mm, 15*mm, 15*mm, 17*mm, 17*mm, 15*mm, 15*mm])
         table.setStyle(common_table_style)
         return table
 
@@ -484,23 +486,23 @@ def build_pdf_report(
     if location_rows:
         elements.append(bar_drawing(
             "Total Skor per Lokasi (10 Terparah)",
-            [row["name"] for row in location_rows[:10]],
+            [f"{row.get('code', '')} {row['name']}".strip() for row in location_rows[:10]],
             [row["score_total"] for row in location_rows[:10]],
             "#E5484D",
         ))
 
     elements.extend([PageBreak(), Paragraph("Detail Temuan", styles["FEWSSection"])])
-    detail_data = [["ID Unix", "Tanggal", "Wilayah", "Area", "Lokasi", "Kesalahan", "Jumlah", "Skor", "Verifikasi"]]
+    detail_data = [["ID Unix", "Tanggal", "Wilayah", "Area", "Kode", "Lokasi", "Kesalahan", "Jumlah", "Skor", "Verifikasi"]]
     for result in transactions:
         row = _detail_row(result)
         detail_data.append([
-            Paragraph(escape(str(row[0])), styles["FEWSSmall"]), row[1], row[2], row[3], row[4],
-            Paragraph(escape(str(row[5])), styles["FEWSSmall"]), row[6], row[7], row[9],
+            Paragraph(escape(str(row[0])), styles["FEWSSmall"]), row[1], row[2], row[3], row[4], row[5],
+            Paragraph(escape(str(row[6])), styles["FEWSSmall"]), row[7], row[8], row[10],
         ])
     detail_table = Table(
         detail_data,
         repeatRows=1,
-        colWidths=[24*mm, 18*mm, 27*mm, 30*mm, 29*mm, 61*mm, 14*mm, 13*mm, 31*mm],
+        colWidths=[23*mm, 17*mm, 25*mm, 27*mm, 13*mm, 27*mm, 55*mm, 13*mm, 12*mm, 28*mm],
     )
     detail_table.setStyle(common_table_style)
     elements.append(detail_table)

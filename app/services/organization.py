@@ -5,7 +5,7 @@ from __future__ import annotations
 
 _MASTER_TEXT = """
 Sumatera Bagian Utara|Area Aceh|Jambo Tape
-Sumatera Bagian Utara|Area Aceh|Lampaseh
+Sumatera Bagian Utara|Area Aceh|Merduati
 Sumatera Bagian Utara|Area Medan|Medan Baru
 Sumatera Bagian Utara|Area Medan|Medan Helvetia
 Sumatera Bagian Utara|Area Medan|Medan Area
@@ -29,10 +29,10 @@ Sumatera Bagian Selatan|Area Lampung|Antasari
 Banten|Area Serang|Kramatwatu
 Banten|Area Serang|Pandeglang
 Banten|Area Serang|Ciruas
-Banten|Area Serang|Cijawa Serang
+Banten|Area Serang|Cijawa Masjid
 Banten|Area Cilegon|Simpang Tiga
 Banten|Area Cilegon|Ruko PCI
-Banten|Area Cilegon|Jombang Cilegon
+Banten|Area Cilegon|Jombang
 Banten|Area Tangerang Kota 2|Veteran Tangerang
 Banten|Area Tangerang Kota 2|Banjar Wijaya
 Banten|Area Tangerang Kota 2|Sangiang
@@ -70,7 +70,7 @@ Megapolitan Selatan|Area Jakarta Selatan 2|Pasar Minggu
 Megapolitan Selatan|Area Jakarta Selatan 1|Tebet
 Megapolitan Selatan|Area Jakarta Selatan 1|Condet
 Megapolitan Selatan|Area Jakarta Selatan 1|Halim
-Megapolitan Selatan|Area Jakarta Selatan 1|Hek-Kramat Jati
+Megapolitan Selatan|Area Jakarta Selatan 1|Hek Kramat Jati
 Megapolitan Selatan|Area Jakarta Selatan 1|Tanah Merdeka
 Megapolitan Utara|Area Utara 1|Salemba
 Megapolitan Utara|Area Utara 1|Kampung Melayu
@@ -111,6 +111,7 @@ Bekasi Plus|Area Jati Bekasi|Jatisari
 Bekasi Plus|Area Kabupaten Bogor|Vila Nusa Indah
 Bekasi Plus|Area Kabupaten Bogor|Bekasi Timur Regency
 Bekasi Plus|Area Kabupaten Bogor|Mustika Jaya
+Bekasi Plus|Area Kabupaten Bogor|Graha Mustika Media
 Bekasi Plus|Area Kabupaten Bogor|Limus Pratama
 Bekasi Plus|Area Kabupaten Bogor|Metland Transyogi
 Bekasi Kota|Bekasi Kota 1|Jati Mulya
@@ -172,9 +173,199 @@ Jatijaya|Area Jawa Timur|Malang
 """.strip()
 
 
+_LOCATION_CODE_TEXT = """
+278|Merduati
+287|Jambo Tape
+132|Medan Baru
+133|Medan Helvetia
+285|Medan Area
+286|Medan Johor
+239|Tanjung Datuk
+259|Panam
+289|Hangtuah
+257|Bukit Tinggi
+277|Payakumbuh
+162|Punti Kayu
+163|Sukamto
+165|Sudirman
+288|The Hok
+290|Telanai Jambi
+293|Way Halim
+294|Metro
+295|Rajabasa
+298|Pahoman
+299|Kemiling
+205|Antasari
+187|Kramatwatu
+197|Pandeglang
+256|Ciruas
+148|Cijawa Masjid
+185|Simpang Tiga
+186|Ruko PCI
+193|Jombang
+141|Veteran Tangerang
+142|Perumnas 2 Tng
+249|Sangiang
+250|Banjar Wijaya
+140|Karawaci
+262|Cikupa
+127|Cengkareng
+128|Pesanggrahan
+129|Meruya Ilir
+152|Ciledug
+178|Puri Beta Larangan
+179|Ceger Pjmi
+184|Karang Tengah
+189|Pinang
+227|Meruya Selatan
+254|Graha Raya
+261|Duri Kosambi
+103|Pangkalan Jati
+108|Palmerah
+171|Ciputat
+177|Pamulang 2
+196|Pamulang 1
+212|Cisauk
+226|Kebon Jeruk
+228|Tanjung Duren
+229|Tomang
+248|BSD Boulevard
+252|Cirendeu
+255|Merpati
+101|Taman Margasatwa
+106|Hek Kramat Jati
+107|Mampang
+109|Pasar Minggu
+110|Bintaro
+168|Halim
+169|Tanah Merdeka
+192|Condet
+216|Radio Dalam
+219|Tebet
+102|Cempaka
+113|Rawa Badak
+117|Kampung Melayu
+157|Kramat Jaya
+173|Salemba
+175|Kramat Asem
+176|Pangkalan Asem
+194|Kemayoran
+201|Sumur Batu (Sunter Jaya)
+203|Kebon Bawang
+105|Buaran
+111|Pondok Kelapa
+112|Pondok Bambu
+115|Rawamangun
+130|Bintara
+174|Cipinang
+183|Perumnas Klender
+188|Radin Inten
+202|Penggilingan
+204|Pulo Gebang
+116|Ciracas
+118|Akses UI
+126|Cibubur
+146|Cikeas
+153|Kranggan
+160|Ciganjur
+167|Cilangkap
+195|Kalisari
+218|Jagakarsa
+269|Jati Rangon
+119|Jatimekar
+122|Vila Nusa Indah
+123|Jatiwarna
+147|Jatisari
+151|Jatiwaringin
+154|Mustika Jaya
+158|Pondok Gede
+223|Graha Mustika Media
+225|Metland Transyogi
+234|Limus Pratama
+270|Jatibening
+274|Bekasi Timur Regency
+120|Rawalumbu
+121|Taman Harapan Baru
+143|Kayuringin
+144|Agus Salim
+155|Harapan Jaya
+159|Galaxy
+211|Villa Indah Permai
+265|Taman Wisma Asri
+267|Sektor 5
+271|Jati Mulya
+273|Narogong
+124|Tambun
+156|Cibitung
+224|Lippo Cikarang
+242|Metland Cibitung
+263|Graha Prima
+264|Karawang
+266|Mangun Jaya
+268|Alamanda
+272|Perumnas 3
+275|Cikarang Pilar
+276|Cikarang Jababeka
+145|Sumeru
+149|Paledang
+190|Bojong Gede
+191|Pomad
+199|Ciomas
+230|Karadenan
+231|RA Kosasih Sukabumi
+232|Atang Senjaya
+233|Bangbarung
+235|Cikaret
+134|Cihanjuang
+135|Buah Batu
+136|Sumbawa
+137|Ujung Berung
+138|Sangkuriang
+210|Kopo
+236|Garut
+237|Tasikmalaya
+279|Antapani
+280|Margahayu
+282|Pahlawan
+283|Cijerah
+131|Malang
+180|SMA Komplek
+181|Gayungsari
+182|Tuparev
+198|Rungkut
+244|Surakarta
+245|Semarang
+246|Kartasura
+260|AM Sangaji
+284|Tegal
+291|Sidoarjo
+292|Purwokerto
+""".strip()
+
+
 ORGANIZATION_ROWS = tuple(tuple(line.split("|", 2)) for line in _MASTER_TEXT.splitlines())
 REGIONS = tuple(dict.fromkeys(region for region, _, _ in ORGANIZATION_ROWS))
 LOCATION_SCOPE = {location.casefold(): (region, area) for region, area, location in ORGANIZATION_ROWS}
+LOCATION_CODE_BY_NAME = {
+    location.casefold(): code
+    for code, location in (line.split("|", 1) for line in _LOCATION_CODE_TEXT.splitlines())
+}
+LOCATION_BY_CODE = {
+    code: location
+    for code, location in (line.split("|", 1) for line in _LOCATION_CODE_TEXT.splitlines())
+}
+ORGANIZATION_CODE_ROWS = tuple(
+    (LOCATION_CODE_BY_NAME[location.casefold()], region, area, location)
+    for region, area, location in ORGANIZATION_ROWS
+)
+
+# Nama lama dari deck tetap diterima agar data historis ikut dimigrasikan.
+LOCATION_ALIASES = {
+    "lampaseh": "Merduati",
+    "cijawa serang": "Cijawa Masjid",
+    "jombang cilegon": "Jombang",
+    "hek-kramat jati": "Hek Kramat Jati",
+}
 
 REGIONAL_ACCOUNTS = {
     "sumbagut": "Sumatera Bagian Utara",
@@ -195,9 +386,34 @@ REGIONAL_ACCOUNTS = {
 }
 
 
-def scope_for_location(location: str) -> tuple[str, str]:
-    """Kembalikan (wilayah, area); nilai tak dikenal tetap eksplisit."""
-    return LOCATION_SCOPE.get((location or "").strip().casefold(), ("Belum Dipetakan", "Belum Dipetakan"))
+def _clean_location_key(value: object) -> str:
+    key = str(value or "").strip()
+    if key.endswith(".0") and key[:-2].isdigit():
+        key = key[:-2]
+    return key
+
+
+def resolve_location(value: object) -> tuple[str, str, str, str]:
+    """Kembalikan (kode, lokasi, wilayah, area) untuk kode SIL maupun nama lokasi."""
+    key = _clean_location_key(value)
+    location = LOCATION_BY_CODE.get(key)
+    if not location:
+        location = LOCATION_ALIASES.get(key.casefold(), key)
+    scope = LOCATION_SCOPE.get(location.casefold())
+    if not scope:
+        return "", key, "Belum Dipetakan", "Belum Dipetakan"
+    region, area = scope
+    return LOCATION_CODE_BY_NAME[location.casefold()], location, region, area
+
+
+def scope_for_location(location: object) -> tuple[str, str]:
+    """Kembalikan (wilayah, area) dari kode SIL atau nama lokasi."""
+    _, _, region, area = resolve_location(location)
+    return region, area
+
+
+def location_code_for_name(location: object) -> str:
+    return resolve_location(location)[0]
 
 
 def areas_for_region(region: str) -> list[str]:
