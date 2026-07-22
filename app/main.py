@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import zipfile
 from time import perf_counter
 from pathlib import Path
 from urllib.parse import quote
@@ -21,7 +22,15 @@ from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import verify_password
-from .config import SESSION_SECRET
+from .config import (
+    IS_PRODUCTION,
+    MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_ROWS,
+    MAX_XLSX_UNCOMPRESSED_BYTES,
+    SESSION_COOKIE_SECURE,
+    SESSION_MAX_AGE_SECONDS,
+    SESSION_SECRET,
+)
 from .database import Base, SessionLocal, engine, get_db, raw_database_url
 from .dependencies import get_current_user, require_central_admin, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
@@ -37,11 +46,15 @@ from .services.system_status import get_database_warning, get_system_status
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="FEWS Approval Monitoring")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="fews_session",
+    max_age=SESSION_MAX_AGE_SECONDS,
+    same_site="lax",
+    https_only=SESSION_COOKIE_SECURE,
+)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-storage_dir = BASE_DIR.parent / "storage"
-if storage_dir.exists():
-    app.mount("/storage", StaticFiles(directory=str(storage_dir)), name="storage")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 logger = logging.getLogger("fews.performance")
 
@@ -53,6 +66,21 @@ async def add_server_timing(request: Request, call_next):
     duration_ms = (perf_counter() - started_at) * 1000
     response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
     response.headers["X-FEWS-Response-Time-Ms"] = f"{duration_ms:.1f}"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; font-src 'self'; base-uri 'self'; "
+        "frame-ancestors 'none'; form-action 'self'"
+    )
+    if request.url.path.startswith("/static/"):
+        response.headers.setdefault("Cache-Control", "public, max-age=3600")
+    else:
+        response.headers.setdefault("Cache-Control", "no-store")
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if duration_ms >= 1000:
         logger.warning("Slow request %s %s took %.1f ms", request.method, request.url.path, duration_ms)
     return response
@@ -396,11 +424,35 @@ def _combine_date_time(date_value, time_value) -> datetime | None:
 def _read_upload_dataframe(upload_file: UploadFile):
     import pandas as pd
 
-    data = upload_file.file.read()
-    filename = (upload_file.filename or "").lower()
-    if filename.endswith(".csv"):
-        return _normalize_upload_dataframe(pd.read_csv(BytesIO(data)))
-    return _normalize_upload_dataframe(pd.read_excel(BytesIO(data)))
+    filename = Path(upload_file.filename or "").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".xlsx", ".csv"}:
+        raise ValueError("Format file harus .xlsx atau .csv")
+
+    data = upload_file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        limit_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
+        raise ValueError(f"Ukuran file melebihi batas {limit_mb:.0f} MB")
+    if not data:
+        raise ValueError("File kosong")
+
+    if suffix == ".xlsx":
+        try:
+            with zipfile.ZipFile(BytesIO(data)) as archive:
+                expanded_size = sum(member.file_size for member in archive.infolist())
+                if expanded_size > MAX_XLSX_UNCOMPRESSED_BYTES:
+                    limit_mb = MAX_XLSX_UNCOMPRESSED_BYTES / (1024 * 1024)
+                    raise ValueError(f"Isi workbook terlalu besar setelah dibuka (batas {limit_mb:.0f} MB)")
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Workbook .xlsx rusak atau tidak valid") from exc
+        dataframe = pd.read_excel(BytesIO(data))
+    else:
+        dataframe = pd.read_csv(BytesIO(data))
+
+    dataframe = _normalize_upload_dataframe(dataframe)
+    if len(dataframe.index) > MAX_UPLOAD_ROWS:
+        raise ValueError(f"Jumlah baris melebihi batas {MAX_UPLOAD_ROWS:,}")
+    return dataframe
 
 
 def _extract_column(df, field_name: str, required: bool = True) -> str | None:
@@ -543,14 +595,19 @@ def home(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request=request, name="login.html", context={"error": None})
 
 
 @app.post("/login", response_class=HTMLResponse)
 def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Username atau password salah."}, status_code=400)
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"error": "Username atau password salah."},
+            status_code=400,
+        )
     request.session["user_id"] = user.id
     add_log(db, "Login", f"User {user.username} login ke sistem.", user_id=user.id)
     return RedirectResponse("/dashboard", status_code=303)
@@ -595,7 +652,7 @@ def dashboard(
         "system_status": get_system_status(),
         "database_warning": get_database_warning(),
     }
-    return templates.TemplateResponse("dashboard.html", context)
+    return templates.TemplateResponse(request=request, name="dashboard.html", context=context)
 
 
 @app.get("/info", response_class=HTMLResponse)
@@ -611,9 +668,9 @@ def info_page(
     if user.region:
         activity_query = activity_query.filter(AuditLog.user_id == user.id)
     return templates.TemplateResponse(
-        "info.html",
-        {
-            "request": request,
+        request=request,
+        name="info.html",
+        context={
             "user": user,
             **summary,
             "latest_alerts": activity_query.order_by(AuditLog.created_at.desc()).limit(12).all(),
@@ -627,6 +684,7 @@ def info_page(
 def branch_inputs_page(
     request: Request,
     imported: int = 0,
+    updated: int = 0,
     failed: int = 0,
     msg: str = "",
     page: int = 1,
@@ -647,12 +705,13 @@ def branch_inputs_page(
         .all()
     )
     return templates.TemplateResponse(
-        "branch_inputs.html",
-        {
-            "request": request,
+        request=request,
+        name="branch_inputs.html",
+        context={
             "user": user,
             "rows": rows,
             "imported": imported,
+            "updated": updated,
             "failed": failed,
             "msg": msg,
             "pagination": {
@@ -683,7 +742,6 @@ def delete_branch_input(
 ):
     deleted = archive_branch_input_with_results(db, branch_input_id, user_id=user.id, reason=correction_reason)
     if deleted:
-        run_matching(db)
         add_log(db, "Koreksi/Arsip Data Approval", f"Data approval #{branch_input_id} diarsipkan oleh {user.username}. Alasan: {correction_reason}", user_id=user.id, status="INFO")
     else:
         add_log(db, "Koreksi/Arsip Data Approval Gagal", f"Data approval #{branch_input_id} tidak ditemukan.", user_id=user.id, status="WARNING")
@@ -710,6 +768,11 @@ def upload_branch_input_excel(
 ):
     try:
         df = _read_upload_dataframe(excel_file)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/branch-inputs?imported=0&updated=0&failed=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
     except Exception:
         return RedirectResponse("/branch-inputs?imported=0&failed=0&msg=Format file tidak bisa dibaca", status_code=303)
 
@@ -746,7 +809,9 @@ def upload_branch_input_excel(
 
     inserted_rows: list[BranchInput] = []
     failed_rows: list[str] = []
+    seen_invoice_codes: set[str] = set()
     source_row_offset = int(df.attrs.get("source_row_offset", 2))
+    safe_source_name = Path(excel_file.filename or "upload.xlsx").name[:255]
 
     for idx, item in df.iterrows():
         line_no = idx + source_row_offset
@@ -775,9 +840,13 @@ def upload_branch_input_excel(
         if not invoice_code or not branch_name or not customer_name:
             failed_rows.append(f"Baris {line_no}: field wajib (cabang/customer/invoice) kosong.")
             continue
+        if invoice_code in seen_invoice_codes:
+            failed_rows.append(f"Baris {line_no}: idunix/invoice '{invoice_code}' duplikat dalam file.")
+            continue
         if not location_code:
             failed_rows.append(f"Baris {line_no}: kode lokasi SIL '{raw_location}' tidak dikenal.")
             continue
+        seen_invoice_codes.add(invoice_code)
 
         payment_method = str(item.get(col_payment) or "transfer").strip().lower() if col_payment else "transfer"
         if payment_method not in {"transfer", "tunai"}:
@@ -827,23 +896,42 @@ def upload_branch_input_excel(
                 destination_account=destination_account or None,
                 proof_reference=proof_reference or None,
                 student_list=student_list or None,
-                source_file_name=excel_file.filename,
+                source_file_name=safe_source_name,
                 source_row_number=line_no,
                 notes=notes or None,
             )
         )
 
+    updated_rows = 0
     if inserted_rows:
-        archive_all_branch_inputs_with_results(db, user_id=user.id, reason=f"Diganti oleh upload baru: {excel_file.filename}")
+        incoming_codes = [row.invoice_code for row in inserted_rows]
+        existing_rows: list[BranchInput] = []
+        for offset in range(0, len(incoming_codes), 900):
+            existing_rows.extend(
+                db.query(BranchInput)
+                .filter(
+                    BranchInput.archived_at.is_(None),
+                    BranchInput.invoice_code.in_(incoming_codes[offset : offset + 900]),
+                )
+                .all()
+            )
+        if existing_rows:
+            archived_at = datetime.utcnow()
+            for existing in existing_rows:
+                existing.archived_at = archived_at
+                existing.correction_reason = f"Diperbarui oleh upload: {safe_source_name}"
+                existing.correction_notes = "Versi sebelumnya tetap disimpan sebagai jejak audit."
+            updated_rows = len(existing_rows)
         db.add_all(inserted_rows)
-        db.commit()
-        run_matching(db)
+        db.flush()
+        run_matching(db, branch_ids=[row.id for row in inserted_rows])
 
     log_status = "WARNING" if failed_rows else "INFO"
     add_log(
         db,
         "Upload Excel Input Cabang",
-        f"{user.username} upload {len(inserted_rows)} baris valid, {len(failed_rows)} baris gagal.",
+        f"{user.username} upload {len(inserted_rows)} baris valid, {updated_rows} pembaruan, "
+        f"{len(failed_rows)} baris gagal dari {safe_source_name}.",
         user_id=user.id,
         status=log_status,
     )
@@ -851,7 +939,11 @@ def upload_branch_input_excel(
     msg = "Upload selesai"
     if failed_rows:
         msg = "Upload selesai dengan sebagian baris gagal"
-    return RedirectResponse(f"/branch-inputs?imported={len(inserted_rows)}&failed={len(failed_rows)}&msg={quote(msg)}", status_code=303)
+    return RedirectResponse(
+        f"/branch-inputs?imported={len(inserted_rows)}&updated={updated_rows}"
+        f"&failed={len(failed_rows)}&msg={quote(msg)}",
+        status_code=303,
+    )
 
 
 @app.get("/bank-mutations", response_class=HTMLResponse)
@@ -960,9 +1052,9 @@ def alert_center(
         .all()
     )
     return templates.TemplateResponse(
-        "alerts.html",
-        {
-            "request": request,
+        request=request,
+        name="alerts.html",
+        context={
             "user": user,
             "rows": results,
             "pagination": {
@@ -1065,8 +1157,9 @@ def reports_page(
     }
     summary = build_monitoring_context(db, user, filters)
     return templates.TemplateResponse(
-        "reports.html",
-        {"request": request, "user": user, **summary},
+        request=request,
+        name="reports.html",
+        context={"user": user, **summary},
     )
 
 

@@ -106,7 +106,7 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertNotIn("Customer Persist", report_page.text)
         self.assertNotIn("<th>Customer</th>", report_page.text)
 
-    def test_central_admin_can_upload_and_map_sil_location_code(self):
+    def test_central_admin_upload_appends_history_and_maps_sil_location_code(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
         csv_data = (
             "tgl_bukubesar,kodelokasi,keterangan_dr_lokasi,jumlah_biaya,jumlah_setor,idunix,bank\n"
@@ -121,14 +121,39 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertIn("imported=1", response.headers["location"])
         active_rows = self.db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).all()
-        self.assertEqual(len(active_rows), 1)
-        self.assertEqual(active_rows[0].location_code, "278")
-        self.assertEqual(active_rows[0].branch_name, "Merduati")
-        self.assertEqual(active_rows[0].area, "Area Aceh")
-        self.assertEqual(active_rows[0].region, "Sumatera Bagian Utara")
-        self.assertIsNotNone(
+        self.assertEqual(len(active_rows), 2)
+        uploaded = self.db.query(BranchInput).filter(BranchInput.invoice_code == "278-260701").one()
+        self.assertEqual(uploaded.location_code, "278")
+        self.assertEqual(uploaded.branch_name, "Merduati")
+        self.assertEqual(uploaded.area, "Area Aceh")
+        self.assertEqual(uploaded.region, "Sumatera Bagian Utara")
+        self.assertIsNone(
             self.db.query(BranchInput).filter(BranchInput.invoice_code == "INV-PERSIST").one().archived_at
         )
+        original_result = (
+            self.db.query(MatchingResult)
+            .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+            .filter(BranchInput.invoice_code == "INV-PERSIST")
+            .one()
+        )
+        self.assertEqual(original_result.follow_up_status, "HOLD")
+        self.assertEqual(original_result.follow_up_notes, "Catatan persistensi")
+
+    def test_same_idunix_upload_archives_old_version_and_activates_replacement(self):
+        self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
+        header = "tgl_bukubesar,kodelokasi,keterangan_dr_lokasi,jumlah_biaya,jumlah_setor,idunix,bank\n"
+        first = (header + "2026-07-01,278,Versi 1,1000,1000,REVISI-1,transfer\n").encode("utf-8")
+        second = (header + "2026-07-02,278,Versi 2,2000,2000,REVISI-1,transfer\n").encode("utf-8")
+
+        self.client.post("/branch-inputs/upload", files={"excel_file": ("hari-1.csv", first, "text/csv")}, follow_redirects=False)
+        response = self.client.post("/branch-inputs/upload", files={"excel_file": ("hari-2.csv", second, "text/csv")}, follow_redirects=False)
+
+        self.assertIn("updated=1", response.headers["location"])
+        versions = self.db.query(BranchInput).filter(BranchInput.invoice_code == "REVISI-1").order_by(BranchInput.id).all()
+        self.assertEqual(len(versions), 2)
+        self.assertIsNotNone(versions[0].archived_at)
+        self.assertIsNone(versions[1].archived_at)
+        self.assertEqual(versions[1].amount_input_branch, 2000)
 
     def test_manual_input_route_is_disabled(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)

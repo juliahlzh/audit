@@ -288,6 +288,22 @@ class MonitoringFeatureTests(unittest.TestCase):
         exported_regions = {sheet.cell(row=row, column=2).value for row in range(6, sheet.max_row + 1)}
         self.assertEqual(exported_regions, {"Jawa Barat"})
 
+    def test_excel_export_escapes_uploaded_formula_text(self):
+        self.jbr_result.branch_input.invoice_code = "=HYPERLINK(\"https://invalid.example\")"
+        self.db.commit()
+        context = build_monitoring_context(
+            self.db, self.admin,
+            {"region": "Jawa Barat", "area": "", "location": "", "month": "2026-06", "indicator": "", "verification": ""},
+        )
+
+        payload = build_ranked_excel_report(
+            context["location_rows"], context["filters"], detail_rows=context["detail_rows"],
+        )
+        cell = load_workbook(BytesIO(payload))["Detail Temuan"]["A2"]
+
+        self.assertEqual(cell.data_type, "s")
+        self.assertTrue(cell.value.startswith("'="))
+
     def test_admin_must_select_region_before_excel_or_pdf_export(self):
         self._login("admin2")
 

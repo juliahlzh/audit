@@ -9,18 +9,19 @@
     <div class="central-upload-copy">
         <h3>Upload Excel ke FEWS</h3>
         <p>Unggah data approval SIL. Kode lokasi akan otomatis dipetakan ke nama lokasi, area, dan wilayah.</p>
-        <small>Upload baru menggantikan dataset aktif; data sebelumnya tetap diarsipkan untuk jejak audit.</small>
+        <small>Upload harian menambah histori. ID Unix yang sudah ada diperbarui dan versi lamanya tetap tersimpan sebagai audit trail.</small>
     </div>
-    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="central-upload-form">
+    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="central-upload-form" data-upload-form>
         <label class="file-drop compact-file-drop">
-            <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+            <input type="file" name="excel_file" accept=".xlsx,.csv" required>
             <strong>Pilih file Excel/CSV</strong>
-            <span class="file-hint">Format SIL dengan kolom kodelokasi dan idunix didukung</span>
+            <span class="file-hint">Maksimal 25.000 baris; kolom kodelokasi dan idunix wajib tersedia</span>
         </label>
         <div class="central-upload-actions">
             <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template</a>
-            <button type="submit">Upload &amp; Proses</button>
+            <button type="submit" data-upload-button>Upload &amp; Proses</button>
         </div>
+        <p class="upload-progress" data-upload-status role="status" aria-live="polite" hidden>File sedang divalidasi, disimpan, dan dianalisis. Jangan tutup halaman.</p>
     </form>
 </section>
 {% endif %}

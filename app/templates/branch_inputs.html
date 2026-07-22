@@ -9,29 +9,31 @@
 
 {% if msg %}
 <div class="alert {{ 'red' if failed > 0 else 'ok' }}">
-    {{ msg }}. Berhasil: {{ imported }} baris{% if failed > 0 %}, gagal: {{ failed }} baris{% endif %}.
+    {{ msg }}. Diproses: {{ imported }} baris{% if updated > 0 %}, pembaruan: {{ updated }} baris{% endif %}{% if failed > 0 %}, gagal: {{ failed }} baris{% endif %}.
 </div>
 {% endif %}
 
 <div class="upload-shell">
     <div class="upload-copy">
         <h3>Upload Excel Approval</h3>
-        <p>Gunakan file `.xlsx`, `.xls`, atau `.csv`. Format setoran bank asli dengan baris header `kodelokasi`, `idunix`, `tgl_bukubesar`, dan `created_at` didukung.</p>
+        <p>Gunakan file `.xlsx` atau `.csv` hingga 25.000 baris. Format setoran bank asli dengan header `kodelokasi`, `idunix`, `tgl_bukubesar`, dan `created_at` didukung.</p>
         <div class="upload-checks">
             <span>✓ Kode lokasi SIL divalidasi</span>
             <span>✓ Deteksi otomatis setelah upload</span>
-            <span>✓ Data lama diarsipkan, bukan dihapus</span>
+            <span>✓ Histori hari sebelumnya tetap aktif</span>
+            <span>✓ ID Unix yang sama diperbarui dengan audit trail</span>
         </div>
     </div>
     <div class="upload-panel">
         <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template Excel</a>
-        <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="upload-form">
+        <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="upload-form" data-upload-form>
             <label class="file-drop">
-                <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required>
+                <input type="file" name="excel_file" accept=".xlsx,.csv" required>
                 <strong>Pilih file approval</strong>
                 <span class="file-hint">Drag atau klik untuk memilih workbook</span>
             </label>
-            <button type="submit">Upload Excel & Jalankan Deteksi</button>
+            <button type="submit" data-upload-button>Upload Excel & Jalankan Deteksi</button>
+            <p class="upload-progress" data-upload-status role="status" aria-live="polite" hidden>File sedang divalidasi, disimpan, dan dianalisis. Jangan tutup halaman.</p>
         </form>
     </div>
 </div>

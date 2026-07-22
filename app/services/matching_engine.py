@@ -153,17 +153,25 @@ def _late_input_rule(method: str, late_days: int) -> tuple[str, int, str]:
     return rule_code, score, severity
 
 
-def run_matching(db: Session) -> list[MatchingResult]:
-    branch_inputs = (
-        db.query(BranchInput)
-        .filter(BranchInput.archived_at.is_(None))
-        .order_by(BranchInput.transaction_date.asc(), BranchInput.id.asc())
-        .all()
-    )
+def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[MatchingResult]:
+    query = db.query(BranchInput).filter(BranchInput.archived_at.is_(None))
+    if branch_ids is None:
+        branch_inputs = query.order_by(BranchInput.transaction_date.asc(), BranchInput.id.asc()).all()
+    else:
+        unique_ids = list(dict.fromkeys(int(item) for item in branch_ids if item is not None))
+        branch_inputs = []
+        for offset in range(0, len(unique_ids), 900):
+            branch_inputs.extend(query.filter(BranchInput.id.in_(unique_ids[offset : offset + 900])).all())
+        branch_inputs.sort(key=lambda item: (item.transaction_date, item.id or 0))
 
     active_ids = [item.id for item in branch_inputs if item.id is not None]
-    if active_ids:
-        db.query(MatchingResult).filter(MatchingResult.branch_input_id.in_(active_ids)).delete(synchronize_session=False)
+    existing_results: dict[int, tuple[str, str | None]] = {}
+    for offset in range(0, len(active_ids), 900):
+        id_chunk = active_ids[offset : offset + 900]
+        for result in db.query(MatchingResult).filter(MatchingResult.branch_input_id.in_(id_chunk)).all():
+            if result.branch_input_id is not None:
+                existing_results[result.branch_input_id] = (result.follow_up_status, result.follow_up_notes)
+        db.query(MatchingResult).filter(MatchingResult.branch_input_id.in_(id_chunk)).delete(synchronize_session=False)
     db.flush()
 
     if not branch_inputs:
@@ -262,6 +270,7 @@ def run_matching(db: Session) -> list[MatchingResult]:
         status = _status_from_score(score)
         mismatch = [str(r["reason"]) for r in triggered]
 
+        previous_follow_up = existing_results.get(item.id)
         result = MatchingResult(
             branch_input_id=item.id,
             bank_mutation_id=None,
@@ -275,8 +284,8 @@ def run_matching(db: Session) -> list[MatchingResult]:
             confidence=max(0.0, 100.0 - (score * 8.0)),
             match_reason="; ".join(mismatch) if mismatch else "Lolos seluruh pengujian FEWS.",
             triggered_rules=json.dumps(triggered, ensure_ascii=False),
-            follow_up_status="OPEN" if score > 0 else "RESOLVED",
-            follow_up_notes=None,
+            follow_up_status=previous_follow_up[0] if previous_follow_up else ("OPEN" if score > 0 else "RESOLVED"),
+            follow_up_notes=previous_follow_up[1] if previous_follow_up else None,
         )
         db.add(result)
         results.append(result)

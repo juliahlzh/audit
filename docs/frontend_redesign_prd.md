@@ -10,6 +10,7 @@ Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lo
 - **Admin Wilayah**: Dashboard Wilayah, Laporan, dan Alert Center dalam mode view-only.
 - Satu akun Admin Wilayah dibuat untuk setiap 15 wilayah pada master organisasi.
 - Admin Pusat dapat melihat seluruh wilayah dan menjadi satu-satunya tipe akun yang dapat mengunggah Excel approval ke FEWS.
+- Upload harian bersifat append untuk `idunix` baru. Jika `idunix` sudah ada, versi lama diarsipkan sebagai audit trail dan versi baru menjadi data aktif.
 - Admin Wilayah tidak dapat upload, input manual, mengarsipkan data, mengubah verifikasi, atau mengubah tindak lanjut.
 - Detail KPI, grafik, laporan, temuan, ekspor, dan Alert Center akun wilayah hanya memuat data wilayah tersebut.
 - Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
@@ -85,6 +86,10 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
 - Admin Pusat melihat Dashboard/Info/Laporan/Alert Center/Upload Data; Admin Wilayah hanya melihat Dashboard/Laporan/Alert Center.
 - Form upload hanya tersedia bagi Admin Pusat; tidak ada form input manual untuk akun mana pun.
+- Upload `.xlsx`/`.csv` memvalidasi tipe file, ukuran, ukuran ekstraksi workbook, jumlah baris, duplikasi `idunix`, dan kode lokasi sebelum mutasi data.
+- Upload hari berikutnya mempertahankan histori hari sebelumnya; koreksi dengan `idunix` sama tidak menghasilkan dua versi aktif.
+- Matching upload hanya memproses batch baru/koreksi dan tidak menghapus status tindak lanjut data historis.
+- Response memakai header keamanan dasar dan session cookie production memakai `Secure`, `SameSite=Lax`, serta secret dari environment.
 - Filter area memengaruhi data secara nyata.
 - Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
 - Grafik garis, grafik indikator/lokasi, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.

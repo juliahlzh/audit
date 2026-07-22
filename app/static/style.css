@@ -1369,6 +1369,29 @@ details[open] > .disclosure-summary .toggle-label::after {
     font-size: 0.9rem;
 }
 
+.upload-progress {
+    grid-column: 1 / -1;
+    margin: 2px 0 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--accent);
+    color: var(--nav);
+    background: var(--surface-soft);
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+[aria-busy="true"] .file-drop {
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+    outline: 3px solid rgba(16, 144, 240, 0.3);
+    outline-offset: 2px;
+}
+
 @media (max-width: 1120px) {
     .filter-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));

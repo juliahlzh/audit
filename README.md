@@ -18,7 +18,7 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 - Admin Wilayah hanya memiliki **Dashboard**, **Laporan**, dan **Alert Center** dalam mode view-only.
 - Data uji dan data realistis sintetis untuk QA.
 
-Manual input tetap dinonaktifkan. Upload Excel/CSV hanya tersedia untuk Admin Pusat; kode lokasi SIL divalidasi dan dipetakan otomatis, sedangkan dataset aktif sebelumnya diarsipkan sebagai jejak audit. Perubahan status/verifikasi hanya dapat dilakukan oleh admin atau auditor; akun wilayah hanya melihat data.
+Manual input tetap dinonaktifkan. Upload Excel/CSV hanya tersedia untuk Admin Pusat; kode lokasi SIL divalidasi dan dipetakan otomatis. Upload harian menambahkan histori, sedangkan `idunix` yang sudah ada diperlakukan sebagai koreksi: versi sebelumnya diarsipkan dan versi baru menjadi aktif. Perubahan status/verifikasi hanya dapat dilakukan oleh admin atau auditor; akun wilayah hanya melihat data.
 
 ## Aturan SOP aktif
 
@@ -49,7 +49,21 @@ Buka `http://127.0.0.1:8000`.
 - 15 akun Admin Wilayah menggunakan password lokal `wilayah123`:
   `sumbagut`, `sumbagsel`, `banten`, `mega_barat1`, `mega_barat2`, `mega_selatan`, `mega_utara`, `mega_timur`, `mega_timur_plus`, `bekasi_plus`, `bekasi_kota`, `jabartara`, `bogor_plus`, `bandung_raya`, dan `jatijaya`.
 
-Ganti seluruh password default sebelum memakai data produksi. Kredensial tidak ditampilkan pada halaman login.
+Default tersebut hanya berlaku pada pengembangan lokal. Kredensial tidak ditampilkan pada halaman login dan tidak boleh dipakai untuk production.
+
+Pada environment production, proses seed akun baru mewajibkan variabel berikut dengan password minimal 12 karakter:
+
+- `FEWS_ADMIN_PASSWORD`
+- `FEWS_AUDITOR_PASSWORD`
+- `FEWS_VIEWER_PASSWORD`
+- `FEWS_REGIONAL_PASSWORD`
+
+Konfigurasi keamanan deployment minimum:
+
+- `FEWS_SESSION_SECRET` berupa nilai acak panjang dan stabil;
+- `FEWS_COOKIE_SECURE=true` untuk HTTPS;
+- `DATABASE_URL` Postgres/Supabase agar data persisten;
+- batas bawaan upload adalah 15 MB, 25.000 baris, dan 100 MB ukuran workbook setelah diekstrak. Batas dapat diubah melalui `FEWS_MAX_UPLOAD_BYTES`, `FEWS_MAX_UPLOAD_ROWS`, dan `FEWS_MAX_XLSX_UNCOMPRESSED_BYTES`.
 
 ## Data QA
 
@@ -81,5 +95,5 @@ Test mencakup rule SOP, persistence, pembatasan wilayah, master organisasi, mode
 
 - Database lokal: `storage/fews_dana_masuk.db`.
 - Untuk Vercel/produksi, set `DATABASE_URL` ke Postgres/Supabase agar data persisten.
-- Set `SESSION_SECRET` yang kuat dan ganti password akun sebelum produksi.
+- Set `FEWS_SESSION_SECRET` yang kuat dan password seed production sebelum deployment pertama.
 - Jalankan `scripts/migrate_database.py` saat memperbarui database lama agar kolom `location_code`, `region`, `area`, dan `data_type` tersedia serta kode SIL lama dipetakan ulang.

@@ -13,6 +13,17 @@ DAY_NAMES_ID = {
 }
 
 
+def _excel_safe(value):
+    """Keep uploaded text from being interpreted as a spreadsheet formula."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+def _excel_safe_row(values) -> list:
+    return [_excel_safe(value) for value in values]
+
+
 def _date_label(value) -> str:
     if not value:
         return "-"
@@ -128,6 +139,8 @@ def build_excel_report(transactions):
             for row in summarize_by_location(transactions)
     ]
     df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.map(_excel_safe)
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Ringkasan Lokasi")
@@ -141,7 +154,7 @@ def _verification_label(status: str | None) -> str:
 def _detail_row(result) -> list:
     branch = result.branch_input
     names = _rule_names(result)
-    return [
+    return _excel_safe_row([
         branch.invoice_code,
         branch.transaction_date.strftime("%d/%m/%Y"),
         branch.region,
@@ -153,7 +166,7 @@ def _detail_row(result) -> list:
         result.risk_score or 0,
         branch.data_type,
         _verification_label(result.follow_up_status),
-    ]
+    ])
 
 
 def build_ranked_excel_report(
@@ -184,7 +197,7 @@ def build_ranked_excel_report(
     sheet["A1"].fill = PatternFill("solid", fgColor="0B2B4C")
     sheet.merge_cells("A1:O1")
     sheet.append(["Dibuat", datetime.now().strftime("%d/%m/%Y %H:%M")])
-    sheet.append([
+    sheet.append(_excel_safe_row([
         "Filter",
         "; ".join(
             f"{label}: {filters.get(key) or 'Semua'}"
@@ -194,7 +207,7 @@ def build_ranked_excel_report(
                 ("indicator", "Kesalahan"), ("verification", "Verifikasi"),
             ]
         ),
-    ])
+    ]))
     sheet.append([])
     headers = [
         "Peringkat", "Wilayah", "Area", "Kode Lokasi", "Lokasi", "Total Temuan", "High Alert", "Need Review",
@@ -203,11 +216,11 @@ def build_ranked_excel_report(
     ]
     sheet.append(headers)
     for row in location_rows:
-        sheet.append([
+        sheet.append(_excel_safe_row([
             row["rank"], row["region"], row["area"], row.get("code", ""), row["name"], row["total"], row["high"], row["medium"],
             row["low"], row["score_total"], row["max_score"], row["avg_score"], row["risk_label"],
             row["verified"], row["unverified"],
-        ])
+        ]))
 
     header_row = 5
     if location_rows:
@@ -233,11 +246,11 @@ def build_ranked_excel_report(
         target = workbook.create_sheet(title)
         target.append(headers)
         for row in rows:
-            target.append([
+            target.append(_excel_safe_row([
                 row["rank"], row["region"], row["area"], row.get("code", ""), row["name"], row["total"], row["high"],
                 row["medium"], row["low"], row["score_total"], row["max_score"], row["avg_score"],
                 row["risk_label"], row["verified"], row["unverified"],
-            ])
+            ]))
         for cell in target[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="145DA0")
@@ -282,7 +295,7 @@ def build_ranked_excel_report(
     trend_sheet.append(["Periode", "Total Skor"])
     values = (trend.get("series") or [{"values": []}])[0].get("values", [])
     for label, value in zip(trend.get("labels", []), values):
-        trend_sheet.append([label, value])
+        trend_sheet.append(_excel_safe_row([label, value]))
     if trend_sheet.max_row > 1:
         chart = LineChart()
         chart.title = "Perbandingan Skor per Periode"
@@ -306,7 +319,7 @@ def build_ranked_excel_report(
     indicator_sheet = workbook.create_sheet("Grafik Indikator")
     indicator_sheet.append(["Indikator", "Jumlah Kesalahan", "Total Skor"])
     for row in indicator_rows:
-        indicator_sheet.append([row["name"], row["value"], row.get("score", 0)])
+        indicator_sheet.append(_excel_safe_row([row["name"], row["value"], row.get("score", 0)]))
     if indicator_sheet.max_row > 1:
         chart = BarChart()
         chart.type = "bar"
@@ -329,7 +342,7 @@ def build_ranked_excel_report(
     location_sheet.append(["Lokasi", "Total Skor", "Jumlah Temuan"])
     for row in location_rows[:10]:
         label = f"{row.get('code')} - {row['name']}" if row.get("code") else row["name"]
-        location_sheet.append([label, row["score_total"], row["total"]])
+        location_sheet.append(_excel_safe_row([label, row["score_total"], row["total"]]))
     if location_sheet.max_row > 1:
         chart = BarChart()
         chart.type = "bar"

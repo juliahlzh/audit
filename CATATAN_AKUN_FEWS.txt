@@ -1,19 +1,16 @@
-CATATAN AKUN FEWS
-=================
+KEAMANAN AKUN FEWS
+==================
 
-Admin
-Username: admin
-Password: admin123
+Repository tidak menyimpan password produksi dalam teks biasa.
 
-Auditor
-Username: auditor
-Password: auditor123
+Atur kredensial produksi melalui pengelola rahasia/environment deployment,
+kemudian simpan daftar akun operasional hanya pada media internal yang memiliki
+kontrol akses. Jangan memasukkan workbook password, file .env, atau credential
+database ke Git.
 
-Viewer
-Username: viewer
-Password: viewer123
+Variabel keamanan minimum:
+- FEWS_SESSION_SECRET: nilai acak yang panjang dan stabil.
+- FEWS_COOKIE_SECURE=true pada deployment HTTPS.
+- DATABASE_URL: Postgres/Supabase persisten untuk deployment Vercel.
 
-PENTING:
-- File ini hanya untuk catatan lokal.
-- Jangan unggah atau bagikan file ini ke publik.
-- Ganti password default sebelum aplikasi digunakan untuk data produksi.
+Password pengembangan lokal wajib diganti sebelum data produksi digunakan.

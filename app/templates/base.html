@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FEWS Approval Monitoring</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -63,6 +64,18 @@
         document.querySelector(".sidebar-close")?.addEventListener("click", () => document.body.classList.remove("sidebar-open"));
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") document.body.classList.remove("sidebar-open");
+        });
+        document.querySelectorAll("[data-upload-form]").forEach((form) => {
+            form.addEventListener("submit", () => {
+                const button = form.querySelector("[data-upload-button]");
+                const status = form.querySelector("[data-upload-status]");
+                if (button) {
+                    button.disabled = true;
+                    button.textContent = "Memproses…";
+                }
+                if (status) status.hidden = false;
+                form.setAttribute("aria-busy", "true");
+            });
         });
     </script>
 </body>
