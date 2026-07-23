@@ -15,7 +15,11 @@ from app.auth import hash_password
 from app.database import Base, get_db
 from app.main import app
 from app.models import BranchInput, MatchingResult, User
-from app.services.analytics import build_monitoring_context
+from app.services.analytics import (
+    build_global_region_ranking,
+    build_monitoring_context,
+    complete_region_rankings,
+)
 from app.services.organization import (
     ORGANIZATION_CODE_ROWS,
     ORGANIZATION_ROWS,
@@ -102,7 +106,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertNotIn('action="/branch-inputs/upload"', response.text)
         self.assertNotIn("legacy-info", response.text)
 
-    def test_executive_dashboard_has_role_specific_kpis_and_interactive_detail(self):
+    def test_executive_dashboard_has_role_specific_kpis_without_detail_table(self):
         self._login("admin2")
         central = self.client.get("/dashboard?month=2026-06")
 
@@ -116,7 +120,9 @@ class MonitoringFeatureTests(unittest.TestCase):
             "data-detail-search", "data-detail-risk", "data-detail-page-size",
             'data-detail-sort="score"', "data-detail-prev", "data-detail-next",
         ]:
-            self.assertIn(control, central.text)
+            self.assertNotIn(control, central.text)
+        self.assertNotIn("Detail Data", central.text)
+        self.assertIn("Detail di Laporan", central.text)
 
         self.client.get("/logout")
         self._login("jabar2")
@@ -277,16 +283,14 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn("Bandung", response.text)
         self.assertNotIn('data-search=" bogor', response.text.lower())
         for heading in [
-            "Ringkasan Risiko Nasional", "Analisis Risiko Jawa Barat",
-            "Indikator Risiko Tertinggi dan Terendah", "Risk Ranking", "Detail Data",
+            "Ringkasan Risiko Nasional", "Ringkasan Perkembangan dan Indikator",
+            "Ranking Lokasi Nasional", "10 Lokasi Risiko Tertinggi", "10 Lokasi Risiko Terendah",
         ]:
             self.assertIn(heading, response.text)
-        self.assertIn('id="executive-score-chart"', response.text)
-        self.assertIn('id="executive-finding-chart"', response.text)
-        self.assertIn('id="executive-trend-chart"', response.text)
-        self.assertIn('data-exec-zoom="in"', response.text)
-        self.assertIn('data-exec-zoom="out"', response.text)
-        self.assertIn('data-exec-zoom="reset"', response.text)
+        self.assertIn('id="national-region-chart"', response.text)
+        self.assertIn("Perbandingan Skor per Periode", response.text)
+        self.assertIn("Jumlah Temuan per Indikator", response.text)
+        self.assertNotIn("Detail Data", response.text)
         self.assertNotIn("Upload Excel ke FEWS", response.text)
         self.assertIn('value="mingguan" selected', response.text)
         self.assertIn('value="2026-W24"', response.text)
@@ -424,21 +428,57 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(weekly["labels"][-2:], ["M24 2026", "M25 2026"])
         self.assertEqual(weekly["values"][-2:], [1, 1])
 
-    def test_dashboard_renders_vertical_indicator_charts_and_catalog(self):
+    def test_dashboard_renders_national_spotlight_and_summary_charts(self):
         self._login("admin2")
         response = self.client.get("/dashboard?month=2026-06")
 
         self.assertEqual(response.status_code, 200)
         for marker in [
-            'id="executive-indicator-chart"',
-            'id="executive-indicator-trend-chart"',
-            'id="executive-group-indicator-chart"',
-            "Macam-macam Indikator SOP",
-            "Komposisi Indikator per Wilayah",
+            'id="national-region-chart"',
+            "Skor Risiko Seluruh 15 Wilayah",
+            "Perbandingan Skor per Periode",
+            "Jumlah Temuan per Indikator",
         ]:
             self.assertIn(marker, response.text)
         for rule in RULE_CONFIG["rules"].values():
             self.assertIn(rule["name"], response.text)
+
+    def test_dashboard_shows_national_location_top_and_bottom_ten_with_score_reasons(self):
+        self._login("admin2")
+        response = self.client.get("/dashboard?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text.count('data-dashboard-ranking-row="highest"'), 10)
+        self.assertEqual(response.text.count('data-dashboard-ranking-row="lowest"'), 10)
+        self.assertIn("Ranking Lokasi Nasional", response.text)
+        self.assertIn("Alasan skor:", response.text)
+        self.assertIn("Cara membaca skor:", response.text)
+        self.assertNotIn("Tabel Detail FEWS", response.text)
+
+        report = self.client.get("/reports?region=Jawa%20Barat&month=2026-06")
+        self.assertIn("Tabel Detail FEWS", report.text)
+
+    def test_national_region_spotlight_contains_exactly_fifteen_master_regions(self):
+        filters = {
+            "region": "",
+            "area": "",
+            "location": "",
+            "period_type": "bulanan",
+            "month": "2026-06",
+            "week": "",
+            "indicator": "",
+            "verification": "",
+        }
+        chart_rows = [
+            row
+            for row in complete_region_rankings(
+                build_global_region_ranking(self.db, self.admin, filters)
+            )
+            if row["name"] in REGIONS
+        ]
+
+        self.assertEqual(len(chart_rows), 15)
+        self.assertEqual({row["name"] for row in chart_rows}, set(REGIONS))
 
     def test_area_filter_limits_results(self):
         self._login("admin2")

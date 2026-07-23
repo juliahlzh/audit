@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-07-24",
+    "surface": "FEWS Central Summary Dashboard",
+    "genre": "modern-minimal",
+    "macrostructure": "Workbench",
+    "variation": "national 15-region spotlight to summary charts to reasoned location rankings",
+    "slopTest": "pass",
+    "responsiveViewports": [320, 375, 414, 768, 1440]
+  },
+  {
     "date": "2026-07-23",
     "surface": "FEWS Executive Dashboard",
     "genre": "modern-minimal",

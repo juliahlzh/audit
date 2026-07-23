@@ -658,3 +658,17 @@ def build_global_region_ranking(db: Session, user: User, filters: dict):
     ranking_filters = {**filters, "region": "", "area": "", "location": ""}
     rows = filtered_results(db, user, **ranking_filters, enforce_user_scope=False)
     return summarize_rankings(rows, "region")
+
+
+def build_global_location_ranking(db: Session, user: User, filters: dict):
+    """Ranking lokasi nasional untuk Admin Pusat; akun wilayah tetap terkunci."""
+    if user.region:
+        rows = filtered_results(db, user, **filters)
+        return complete_location_rankings(summarize_rankings(rows, "location"), user, filters)
+    ranking_filters = {**filters, "region": "", "area": "", "location": ""}
+    rows = filtered_results(db, user, **ranking_filters, enforce_user_scope=False)
+    return complete_location_rankings(
+        summarize_rankings(rows, "location"),
+        user,
+        ranking_filters,
+    )

@@ -38,6 +38,7 @@ from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
 from .services.analytics import (
+    build_global_location_ranking,
     build_global_region_ranking,
     build_monitoring_context,
     complete_region_rankings,
@@ -46,7 +47,7 @@ from .services.analytics import (
     previous_period_filters,
 )
 from .services.matching_engine import run_matching
-from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, resolve_location
+from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, REGIONS, resolve_location
 from .services.rule_config import RULE_CONFIG
 from .services.reports import build_excel_report, build_pdf_report, build_ranked_excel_report, summarize_by_location
 from .services.system_status import get_database_warning, get_system_status
@@ -654,6 +655,36 @@ def dashboard(
     data = build_monitoring_context(db, user, filters)
     global_region_rows = complete_region_rankings(build_global_region_ranking(db, user, filters))
     data["global_region_rows"] = global_region_rows
+    master_region_rows = [
+        row for row in global_region_rows if row["name"] in REGIONS
+    ]
+    data["national_region_chart_rows"] = [
+        {
+            "name": row["name"],
+            "rank": row["rank"],
+            "score_total": row["score_total"],
+            "total": row["total"],
+            "high": row["high"],
+            "indicator_summary": row["indicator_summary"],
+        }
+        for row in master_region_rows
+    ]
+    selected_region = user.region or filters.get("region", "")
+    data["national_region_focus"] = next(
+        (row for row in data["national_region_chart_rows"] if row["name"] == selected_region),
+        data["national_region_chart_rows"][0] if data["national_region_chart_rows"] else None,
+    )
+    dashboard_location_rows = (
+        data["executive_location_rows"]
+        if user.region
+        else build_global_location_ranking(db, user, filters)
+    )
+    data["dashboard_ranking_scope"] = user.region or "Nasional"
+    data["dashboard_top_location_rows"] = dashboard_location_rows[:10]
+    data["dashboard_bottom_location_rows"] = sorted(
+        dashboard_location_rows,
+        key=lambda row: (row["score_total"], row["total"], row["name"]),
+    )[:10]
     data["national_region_summary"] = None
     if user.region:
         current_index = next(

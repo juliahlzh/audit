@@ -1,3 +1,7 @@
+{% if filter_action == '/dashboard' %}
+<details class="dashboard-filter-disclosure" data-dashboard-filter>
+    <summary><span>Filter Dashboard</span><strong>{{ filters.week if filters.period_type == 'mingguan' and filters.week else (filters.month if filters.month else 'Seluruh data') }}</strong></summary>
+{% endif %}
 <form class="monitor-filter" method="get" action="{{ filter_action }}" data-period-filter>
     {% if filter_action == '/rankings' %}<input type="hidden" name="scope" value="{{ scope }}">{% endif %}
     <div class="filter-field">
@@ -41,6 +45,9 @@
     </div>
     <div class="filter-actions"><button type="submit">Terapkan</button><a href="{{ filter_action }}">Reset</a></div>
 </form>
+{% if filter_action == '/dashboard' %}
+</details>
+{% endif %}
 
 <script>
 (() => {
@@ -58,5 +65,7 @@
     };
     type.addEventListener("change", sync);
     sync();
+    const disclosure = document.querySelector("[data-dashboard-filter]");
+    if (disclosure) disclosure.open = !window.matchMedia("(max-width: 760px)").matches;
 })();
 </script>

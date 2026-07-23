@@ -1,0 +1,49 @@
+<section class="executive-section national-region-spotlight" aria-labelledby="national-region-heading">
+    <div class="executive-section-heading">
+        <div>
+            <span class="executive-kicker">Sorotan Utama Dashboard Pusat</span>
+            <h3 id="national-region-heading">Skor Risiko Seluruh 15 Wilayah</h3>
+            <p>Seluruh wilayah tetap terlihat. Filter periode, indikator, dan verifikasi mengubah nilainya tanpa menghilangkan wilayah lain.</p>
+        </div>
+        <div class="executive-chart-legend" aria-label="Keterangan grafik wilayah">
+            <span class="high">3 skor tertinggi</span>
+            <span class="medium">Peringkat 4–7</span>
+            <span class="low">Peringkat berikutnya</span>
+        </div>
+    </div>
+
+    <div class="executive-chart-scroll national-region-scroll" tabindex="0">
+        <div id="national-region-chart" class="national-region-chart" role="img" aria-label="Grafik batang vertikal skor risiko seluruh 15 wilayah"></div>
+    </div>
+
+    {% if national_region_focus %}
+    <div class="national-region-explanation">
+        <div><span>Wilayah yang disorot</span><strong>#{{ national_region_focus.rank }} · {{ national_region_focus.name }}</strong></div>
+        <dl>
+            <div><dt>Total skor</dt><dd>{{ national_region_focus.score_total }}</dd></div>
+            <div><dt>Temuan</dt><dd>{{ national_region_focus.total }}</dd></div>
+            <div><dt>Risiko tinggi</dt><dd>{{ national_region_focus.high }}</dd></div>
+        </dl>
+        <p><strong>Alasan skor:</strong> {{ national_region_focus.indicator_summary if national_region_focus.score_total else 'Tidak ada indikator risiko pada filter aktif.' }}</p>
+    </div>
+    {% endif %}
+</section>
+
+<script type="application/json" id="national-region-data">{{ national_region_chart_rows|tojson }}</script>
+<script>
+(() => {
+    const target = document.getElementById("national-region-chart");
+    const rows = JSON.parse(document.getElementById("national-region-data").textContent || "[]");
+    const selectedRegion = {{ (user.region or filters.region or '')|tojson }};
+    const escapeText = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+    const maxScore = Math.max(1, ...rows.map(row => Number(row.score_total || 0)));
+    target.innerHTML = rows.map(row => {
+        const score = Number(row.score_total || 0);
+        const tone = row.rank <= 3 ? "high" : row.rank <= 7 ? "medium" : "low";
+        const selected = row.name === selectedRegion ? " selected" : "";
+        const reason = score ? row.indicator_summary : "Tidak ada indikator risiko pada filter aktif";
+        const label = `${row.name}, ranking ${row.rank}, skor ${score}, ${row.total} temuan. Alasan: ${reason}`;
+        return `<div class="national-region-column ${tone}${selected}" tabindex="0" title="${escapeText(label)}" aria-label="${escapeText(label)}"><strong>${score}</strong><div class="national-region-track"><i style="height:${score / maxScore * 100}%"></i></div><span><small>#${row.rank}</small>${escapeText(row.name)}</span></div>`;
+    }).join("");
+})();
+</script>

@@ -1,0 +1,46 @@
+<section class="executive-section dashboard-ranking-section" aria-labelledby="dashboard-location-ranking-heading">
+    <div class="executive-section-heading">
+        <div>
+            <h3 id="dashboard-location-ranking-heading">Ranking Lokasi {{ dashboard_ranking_scope }}</h3>
+            <p>Rank #1 adalah prioritas investigasi tertinggi. Penyebab skor diringkas dari indikator yang muncul.</p>
+        </div>
+        <div class="executive-ranking-links">
+            <a href="/rankings?scope=location">Ranking Lengkap</a>
+            <a href="/reports{% if request.url.query %}?{{ request.url.query }}{% endif %}">Detail di Laporan</a>
+        </div>
+    </div>
+
+    <div class="dashboard-location-ranking-grid">
+        <article class="executive-ranking-panel urgent">
+            <div class="executive-ranking-heading"><h4>10 Lokasi Risiko Tertinggi</h4><span>Skor terbesar</span></div>
+            {% for row in dashboard_top_location_rows %}
+            <div class="executive-ranking-row dashboard-ranking-row" data-dashboard-ranking-row="highest">
+                <span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span>
+                <span><strong>{{ row.code or '—' }} · {{ row.name }}</strong><small>{{ row.region }} · {{ row.total }} temuan</small><em><b>Alasan skor:</b> {{ row.indicator_summary if row.score_total else 'Tidak ada indikator risiko pada filter aktif.' }}</em></span>
+                <b>{{ row.score_total }}</b>
+            </div>
+            {% endfor %}
+        </article>
+
+        <article class="executive-ranking-panel safe">
+            <div class="executive-ranking-heading"><h4>10 Lokasi Risiko Terendah</h4><span>Skor terkecil</span></div>
+            {% for row in dashboard_bottom_location_rows %}
+            <div class="executive-ranking-row dashboard-ranking-row" data-dashboard-ranking-row="lowest">
+                <span class="rank-number">{{ row.rank }}</span>
+                <span><strong>{{ row.code or '—' }} · {{ row.name }}</strong><small>{{ row.region }} · {{ row.total }} temuan</small><em><b>Alasan skor:</b> {{ row.indicator_summary if row.score_total else 'Tidak ada indikator risiko pada filter aktif.' }}</em></span>
+                <b>{{ row.score_total }}</b>
+            </div>
+            {% endfor %}
+        </article>
+    </div>
+
+    {% if user.region and national_region_summary %}
+    <article class="executive-ranking-panel national-summary dashboard-national-summary">
+        <div class="executive-ranking-heading"><h4>Ringkasan Ranking Nasional Wilayah</h4><span>{{ user.region }}</span></div>
+        <div class="national-rank-number"><span>Posisi wilayah pada ranking nasional</span><strong>#{{ national_region_summary.rank }}</strong></div>
+        <dl><div><dt>Total Skor</dt><dd>{{ national_region_summary.score_total }}</dd></div><div><dt>Total Temuan</dt><dd>{{ national_region_summary.total }}</dd></div><div><dt>Selisih dengan ranking di atas</dt><dd>{{ national_region_summary.gap_above if national_region_summary.gap_above is not none else '—' }}</dd></div><div><dt>Perubahan Ranking</dt><dd>{% if national_region_summary.rank_delta is none %}—{% elif national_region_summary.rank_delta > 0 %}Naik {{ national_region_summary.rank_delta }}{% elif national_region_summary.rank_delta < 0 %}Turun {{ national_region_summary.rank_delta|abs }}{% else %}Tetap{% endif %}</dd></div></dl>
+    </article>
+    {% endif %}
+
+    <p class="dashboard-score-method"><strong>Cara membaca skor:</strong> total skor lokasi merupakan akumulasi skor seluruh temuan pada periode aktif. Nama indikator dan jumlah kemunculannya menjelaskan faktor utama pembentuk skor; rincian ID Unix dan transaksi berada di Laporan.</p>
+</section>
