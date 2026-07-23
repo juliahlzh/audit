@@ -265,7 +265,7 @@ def build_ranked_excel_report(
         for index, width in enumerate(widths, start=1):
             target.column_dimensions[get_column_letter(index)].width = width
 
-    add_ranking_sheet("10 Terparah", location_rows[:10], "RankingTerparahFEWS")
+    add_ranking_sheet("10 Risiko Tertinggi", location_rows[:10], "RankingTertinggiFEWS")
     add_ranking_sheet("10 Terendah", list(reversed(location_rows[-10:])), "RankingTerendahFEWS")
 
     detail = workbook.create_sheet("Detail Temuan")
@@ -448,7 +448,7 @@ def build_pdf_report(
         return table
 
     elements.extend([
-        Paragraph("10 Risiko Terparah", styles["FEWSSection"]),
+        Paragraph("10 Risiko Tertinggi", styles["FEWSSection"]),
         ranking_table(location_rows[:10]),
         Paragraph("10 Risiko Terendah", styles["FEWSSection"]),
         ranking_table(list(reversed(location_rows[-10:]))),
@@ -498,7 +498,7 @@ def build_pdf_report(
         ))
     if location_rows:
         elements.append(bar_drawing(
-            "Total Skor per Lokasi (10 Terparah)",
+            "Total Skor per Lokasi (10 Tertinggi)",
             [f"{row.get('code', '')} {row['name']}".strip() for row in location_rows[:10]],
             [row["score_total"] for row in location_rows[:10]],
             "#E5484D",

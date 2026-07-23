@@ -1,4 +1,4 @@
-# FEWS Monitoring PRD — Pembaruan 14 Juli 2026
+# FEWS Monitoring PRD — Pembaruan 23 Juli 2026
 
 ## Tujuan
 
@@ -18,6 +18,7 @@ Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lo
 - Hanya admin/auditor yang dapat mengubah status verifikasi atau tindak lanjut.
 - Menu **Info** mempertahankan seluruh informasi monitoring dashboard lama dalam halaman terpisah.
 - Manual input tetap tidak tersedia. Upload Excel hanya tampil dan dapat dipakai oleh Admin Pusat.
+- Dashboard tidak memuat form upload. Admin Pusat mengunggah data hanya melalui menu `Upload Data`, sehingga Dashboard dan Laporan mempunyai fungsi yang jelas dan berbeda.
 
 ## Master organisasi
 
@@ -59,11 +60,14 @@ Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanj
 
 Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas input maksimal H+2 hari kerja dari tanggal bank dan warning merah setelah lebih dari H+10. Layout memuat:
 
+- indikator `Double Input Bukti Transfer`: dua atau lebih data aktif dengan fingerprint transaksi yang sama (tanggal/waktu input, tanggal bank/setor, waktu pembayaran, lokasi, customer, nominal, metode pembayaran, dan rekening tujuan) serta `proof_reference` bukti transfer yang sama; ID Unix boleh berbeda;
+- Dashboard ringkas dengan urutan grafik tren temuan per wilayah, grafik tren temuan per lokasi, kartu indikator utama, daftar penyebab per lokasi, lalu detail temuan ringkas di bagian paling bawah;
+- grafik wilayah/lokasi berbasis jumlah temuan, bukan skor sebagai fokus utama, serta mendukung scroll horizontal dan kontrol zoom in, zoom out, dan reset;
 - tabel ID Unix, kesalahan, jumlah kesalahan, dan skor;
 - grafik batang per indikator dan per lokasi;
 - grafik garis perbandingan enam periode bulanan atau mingguan beserta analisis perubahan periode terakhir;
 - ranking wilayah/lokasi per periode;
-- dua tabel ranking lokasi yang eksplisit: 10 risiko terparah dan 10 risiko terendah;
+- dua tabel ranking lokasi yang eksplisit: 10 risiko tertinggi dan 10 risiko terendah;
 - akses detail berbasis wilayah.
 
 ## Data pengujian
@@ -75,7 +79,7 @@ Loader harus idempoten, memetakan area dari master lokasi, dan tidak otomatis me
 
 ## Ekspor
 
-Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Keduanya memuat konteks periode, ringkasan, grafik tren, grafik indikator, grafik lokasi, ranking 10 risiko terparah dan 10 risiko terendah, serta tabel detail ID Unix–kesalahan–jumlah–skor. Excel memakai tabel terstruktur, autofilter, freeze pane, dan chart Excel yang dapat diedit. PDF memakai grafik vektor dan tabel yang dapat berlanjut ke halaman berikutnya.
+Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wilayah. Akun wilayah otomatis memakai wilayah yang terkunci pada akunnya; admin/auditor wajib memilih wilayah dan ekspor nasional tanpa wilayah ditolak. Keduanya memuat konteks periode, ringkasan, grafik tren, grafik indikator, grafik lokasi, ranking 10 risiko tertinggi dan 10 risiko terendah, serta tabel detail ID Unix–kesalahan–jumlah–skor. Excel memakai tabel terstruktur, autofilter, freeze pane, dan chart Excel yang dapat diedit. PDF memakai grafik vektor dan tabel yang dapat berlanjut ke halaman berikutnya.
 
 ## Kriteria penerimaan
 
@@ -86,13 +90,17 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
 - Admin Pusat melihat Dashboard/Info/Laporan/Alert Center/Upload Data; Admin Wilayah hanya melihat Dashboard/Laporan/Alert Center.
 - Form upload hanya tersedia bagi Admin Pusat; tidak ada form input manual untuk akun mana pun.
+- Dashboard tidak menampilkan form upload; menu `Upload Data` tetap tersedia khusus Admin Pusat.
+- Dashboard menampilkan grafik wilayah dan lokasi sebelum KPI, ringkasan indikator penyebab per lokasi, dan detail ringkas di posisi terakhir.
+- Grafik dashboard dapat di-zoom, di-reset, dan di-scroll tanpa menimbulkan overflow halaman pada desktop maupun mobile.
+- Double Input terdeteksi saat fingerprint transaksi dan referensi bukti transfer sama, termasuk jika ID Unix berbeda.
 - Upload `.xlsx`/`.csv` memvalidasi tipe file, ukuran, ukuran ekstraksi workbook, jumlah baris, duplikasi `idunix`, dan kode lokasi sebelum mutasi data.
 - Upload hari berikutnya mempertahankan histori hari sebelumnya; koreksi dengan `idunix` sama tidak menghasilkan dua versi aktif.
 - Matching upload hanya memproses batch baru/koreksi dan tidak menghapus status tindak lanjut data historis.
 - Response memakai header keamanan dasar dan session cookie production memakai `Secure`, `SameSite=Lax`, serta secret dari environment.
 - Filter area memengaruhi data secara nyata.
 - Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
-- Grafik garis, grafik indikator/lokasi, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Grafik garis wilayah/lokasi, grafik indikator, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
 - Informasi yang tampil pada Dashboard dan Laporan mempunyai padanan data pada PDF dan Excel untuk filter wilayah yang sama.
 - Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
 

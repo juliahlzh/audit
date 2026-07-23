@@ -1,6 +1,6 @@
 <div class="monitor-grid ranking-pair-grid">
     <section class="monitor-panel">
-        <div class="monitor-panel-heading"><div><h3>10 Risiko Terparah</h3><p>Diurutkan dari total skor tertinggi.</p></div></div>
+        <div class="monitor-panel-heading"><div><h3>10 Risiko Tertinggi</h3><p>Diurutkan dari total skor tertinggi.</p></div></div>
         <div class="table-wrap"><table class="ranking-table">
             <thead><tr><th>Rank</th><th>Kode Lokasi</th><th>Lokasi</th><th>Area</th><th>Temuan</th><th>Total Skor</th><th>Risiko</th></tr></thead>
             <tbody>{% for row in top_location_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.code or '—' }}</strong></td><td><strong>{{ row.name }}</strong></td><td>{{ row.area }}</td><td>{{ row.total }}</td><td><strong>{{ row.score_total }}</strong></td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td></tr>{% else %}<tr><td colspan="7">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>

@@ -283,6 +283,7 @@ class SopFewsTests(unittest.TestCase):
             "late_input_cash",
             "date_mismatch",
             "amount_mismatch",
+            "double_input",
         }
         db = self.Session()
         db.add(

@@ -36,7 +36,13 @@ from .dependencies import get_current_user, require_central_admin, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
-from .services.analytics import build_global_region_ranking, build_monitoring_context, filter_options, filtered_results
+from .services.analytics import (
+    build_global_region_ranking,
+    build_global_region_trend,
+    build_monitoring_context,
+    filter_options,
+    filtered_results,
+)
 from .services.matching_engine import run_matching
 from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, resolve_location
 from .services.rule_config import RULE_CONFIG
@@ -645,6 +651,8 @@ def dashboard(
     }
     data = build_monitoring_context(db, user, filters)
     data["global_region_rows"] = build_global_region_ranking(db, user, filters)
+    if user.region:
+        data["region_trend"] = build_global_region_trend(db, user, filters)
     context = {
         "request": request,
         "user": user,

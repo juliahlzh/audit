@@ -48,6 +48,7 @@ RULE_CONFIG = {
         "late_input_cash": 2,
         "date_mismatch": 1,
         "amount_mismatch": 4,
+        "double_input": 5,
     },
     "rules": {
         "off_hour": {
@@ -96,6 +97,14 @@ RULE_CONFIG = {
             "definition": "Jumlah biaya pada SIL harus sesuai dengan jumlah setor; selisih dapat mengindikasikan salah input atau double input.",
             "description": "Jumlah biaya berbeda dengan jumlah setor.",
             "recommendation": "Klarifikasi ke Divisi Keuangan, bukan ke MBX; cek kemungkinan salah input, double input, atau nominal setor tidak sesuai.",
+            "clarification_required": True,
+        },
+        "double_input": {
+            "category": "Indikator Duplikasi Transaksi",
+            "name": "Double Input Bukti Transfer",
+            "definition": "Data aktif dengan fingerprint transaksi dan referensi bukti transfer yang sama terindikasi sebagai input ganda meskipun ID Unix berbeda.",
+            "description": "Data transaksi dan bukti transfer yang sama ditemukan lebih dari satu kali.",
+            "recommendation": "Periksa bukti transfer dan ID Unix terkait, lalu arsipkan entri duplikat melalui mekanisme koreksi agar audit trail tetap terjaga.",
             "clarification_required": True,
         },
     },

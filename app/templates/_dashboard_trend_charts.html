@@ -1,0 +1,125 @@
+<div class="dashboard-chart-stack">
+    <section class="monitor-panel interactive-chart-panel">
+        <div class="monitor-panel-heading chart-heading">
+            <div>
+                <span class="section-kicker">01 · Wilayah</span>
+                <h3>Tren Temuan per Wilayah</h3>
+                <p>{{ 'Perbandingan nasional; detail transaksi tetap terkunci ke wilayah akun.' if user.region else 'Jumlah temuan tiap wilayah selama enam periode terakhir.' }}</p>
+            </div>
+            <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik wilayah">
+                <button type="button" data-chart-action="out" data-chart-target="region" aria-label="Perkecil grafik wilayah">−</button>
+                <button type="button" data-chart-action="reset" data-chart-target="region">100%</button>
+                <button type="button" data-chart-action="in" data-chart-target="region" aria-label="Perbesar grafik wilayah">+</button>
+            </div>
+        </div>
+        <div class="interactive-chart-scroll" data-chart-scroll="region" tabindex="0" aria-label="Grafik tren temuan per wilayah; dapat digulir horizontal">
+            <div id="dashboard-region-trend" class="multi-line-chart"></div>
+        </div>
+        <div id="dashboard-region-legend" class="chart-legend" aria-label="Legenda wilayah"></div>
+        <details class="ranking-disclosure">
+            <summary>Lihat ranking wilayah periode aktif</summary>
+            <div class="table-wrap">
+                <table class="ranking-table">
+                    <thead><tr><th>Rank</th><th>Wilayah</th><th>Temuan</th><th>Total Skor</th><th>Risiko</th><th>Sudah</th><th>Belum</th></tr></thead>
+                    <tbody>{% for row in (global_region_rows if user.region else region_rows) %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td><strong>{{ row.score_total }}</strong></td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>{{ row.verified }}</td><td>{{ row.unverified }}</td></tr>{% else %}<tr><td colspan="7">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </details>
+    </section>
+
+    <section class="monitor-panel interactive-chart-panel">
+        <div class="monitor-panel-heading chart-heading">
+            <div>
+                <span class="section-kicker">02 · Lokasi</span>
+                <h3>Tren Temuan per Lokasi</h3>
+                <p>Sepuluh lokasi dengan temuan terbanyak selama enam periode terakhir.</p>
+            </div>
+            <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik lokasi">
+                <button type="button" data-chart-action="out" data-chart-target="location" aria-label="Perkecil grafik lokasi">−</button>
+                <button type="button" data-chart-action="reset" data-chart-target="location">100%</button>
+                <button type="button" data-chart-action="in" data-chart-target="location" aria-label="Perbesar grafik lokasi">+</button>
+            </div>
+        </div>
+        <div class="interactive-chart-scroll" data-chart-scroll="location" tabindex="0" aria-label="Grafik tren temuan per lokasi; dapat digulir horizontal">
+            <div id="dashboard-location-trend" class="multi-line-chart"></div>
+        </div>
+        <div id="dashboard-location-legend" class="chart-legend" aria-label="Legenda lokasi"></div>
+    </section>
+</div>
+
+<script type="application/json" id="dashboard-region-trend-data">{{ region_trend|tojson }}</script>
+<script type="application/json" id="dashboard-location-trend-data">{{ location_trend|tojson }}</script>
+<script>
+(() => {
+    const chartStates = new Map();
+    const palette = [
+        "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)",
+        "var(--chart-6)", "var(--chart-7)", "var(--chart-8)", "var(--chart-9)", "var(--chart-10)",
+        "var(--chart-11)", "var(--chart-12)", "var(--chart-13)", "var(--chart-14)", "var(--chart-15)"
+    ];
+    const escapeText = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+
+    const renderChart = name => {
+        const data = JSON.parse(document.getElementById(`dashboard-${name}-trend-data`).textContent || "{}");
+        const target = document.getElementById(`dashboard-${name}-trend`);
+        const legend = document.getElementById(`dashboard-${name}-legend`);
+        const state = chartStates.get(name) || {zoom: 1};
+        chartStates.set(name, state);
+        const series = data.series || [];
+        const labels = data.labels || [];
+        const width = Math.max(780, labels.length * 132);
+        const height = 330;
+        const pad = {left: 52, right: 24, top: 22, bottom: 54};
+        const allValues = series.flatMap(item => item.values || []);
+        document.querySelectorAll(`[data-chart-target="${name}"]`).forEach(button => {
+            button.disabled = !series.length;
+        });
+        const maxValue = Math.max(4, ...allValues);
+        const plotWidth = width - pad.left - pad.right;
+        const plotHeight = height - pad.top - pad.bottom;
+        const x = index => pad.left + (labels.length <= 1 ? 0 : index * plotWidth / (labels.length - 1));
+        const y = value => pad.top + plotHeight - (Number(value || 0) / maxValue * plotHeight);
+        const grid = [0, .25, .5, .75, 1].map(ratio => {
+            const gridY = pad.top + plotHeight * ratio;
+            return `<line x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}" class="chart-grid"/><text x="${pad.left - 10}" y="${gridY + 4}" text-anchor="end" class="chart-axis">${Math.round(maxValue * (1 - ratio))}</text>`;
+        }).join("");
+        const xLabels = labels.map((label, index) => `<text x="${x(index)}" y="${height - 24}" text-anchor="middle" class="chart-axis">${escapeText(label)}</text>`).join("");
+        const paths = series.map((item, seriesIndex) => {
+            const color = palette[seriesIndex % palette.length];
+            const points = (item.values || []).map((value, index) => `${x(index)},${y(value)}`).join(" ");
+            const dots = (item.values || []).map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="var(--surface)" stroke="${color}" stroke-width="2"><title>${escapeText(item.name)} · ${escapeText(labels[index])}: ${value} temuan</title></circle>`).join("");
+            return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+        }).join("");
+        if (!series.length) {
+            target.innerHTML = `<div class="chart-empty">Belum ada data tren untuk filter ini.</div>`;
+            legend.innerHTML = "";
+            document.querySelector(`[data-chart-action="reset"][data-chart-target="${name}"]`).textContent = "100%";
+            return;
+        }
+        target.innerHTML = `<svg viewBox="0 0 ${width} ${height}" style="width:${width * state.zoom}px" role="img" aria-label="Jumlah temuan per ${name === "region" ? "wilayah" : "lokasi"}">${grid}${xLabels}${paths}</svg>`;
+        legend.innerHTML = series.map((item, index) => `<span><i style="background:${palette[index % palette.length]}"></i>${escapeText(item.name)} <strong>${item.total}</strong></span>`).join("");
+        document.querySelector(`[data-chart-action="reset"][data-chart-target="${name}"]`).textContent = `${Math.round(state.zoom * 100)}%`;
+    };
+
+    ["region", "location"].forEach(renderChart);
+    document.querySelectorAll("[data-chart-action]").forEach(button => {
+        button.addEventListener("click", () => {
+            const name = button.dataset.chartTarget;
+            const state = chartStates.get(name);
+            if (button.dataset.chartAction === "in") state.zoom = Math.min(2.5, state.zoom + .25);
+            if (button.dataset.chartAction === "out") state.zoom = Math.max(.75, state.zoom - .25);
+            if (button.dataset.chartAction === "reset") state.zoom = 1;
+            renderChart(name);
+        });
+    });
+    document.querySelectorAll("[data-chart-scroll]").forEach(scroller => {
+        scroller.addEventListener("wheel", event => {
+            if (!event.ctrlKey) return;
+            event.preventDefault();
+            const state = chartStates.get(scroller.dataset.chartScroll);
+            state.zoom = Math.max(.75, Math.min(2.5, state.zoom + (event.deltaY < 0 ? .25 : -.25)));
+            renderChart(scroller.dataset.chartScroll);
+        }, {passive: false});
+    });
+})();
+</script>

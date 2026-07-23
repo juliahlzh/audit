@@ -91,7 +91,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn('href="/alerts"', response.text)
         self.assertIn("Upload Data", response.text)
         self.assertIn("Dashboard Pusat FEWS", response.text)
-        self.assertIn('action="/branch-inputs/upload"', response.text)
+        self.assertNotIn('action="/branch-inputs/upload"', response.text)
         self.assertNotIn("legacy-info", response.text)
 
     def test_info_page_contains_complete_legacy_dashboard_information(self):
@@ -219,10 +219,14 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn("JBR-1", response.text)
         self.assertNotIn("JBR-W25", response.text)
         for heading in [
-            "Perbandingan Skor per Periode", "Grafik per Indikator", "Grafik per Lokasi",
-            "10 Risiko Terparah", "10 Risiko Terendah", "Detail Temuan FEWS",
+            "Tren Temuan per Wilayah", "Tren Temuan per Lokasi",
+            "Penyebab Utama berdasarkan Lokasi", "Detail Temuan Terbaru",
         ]:
             self.assertIn(heading, response.text)
+        self.assertIn('data-chart-action="in"', response.text)
+        self.assertIn('data-chart-action="out"', response.text)
+        self.assertIn('data-chart-action="reset"', response.text)
+        self.assertNotIn("Upload Excel ke FEWS", response.text)
         self.assertIn('value="mingguan" selected', response.text)
         self.assertIn('value="2026-W24"', response.text)
 
@@ -263,13 +267,13 @@ class MonitoringFeatureTests(unittest.TestCase):
         workbook = load_workbook(BytesIO(complete_payload))
         self.assertEqual(
             workbook.sheetnames,
-            ["Ranking Lokasi", "10 Terparah", "10 Terendah", "Detail Temuan", "Tren Periode", "Grafik Indikator", "Grafik Lokasi"],
+            ["Ranking Lokasi", "10 Risiko Tertinggi", "10 Terendah", "Detail Temuan", "Tren Periode", "Grafik Indikator", "Grafik Lokasi"],
         )
         self.assertEqual(workbook["Detail Temuan"]["A1"].value, "ID Unix")
         self.assertEqual(workbook["Detail Temuan"]["E1"].value, "Kode Lokasi")
         self.assertEqual(workbook["Detail Temuan"]["H1"].value, "Jumlah Kesalahan")
         self.assertIsNone(workbook["Ranking Lokasi"].auto_filter.ref)
-        self.assertIsNone(workbook["10 Terparah"].auto_filter.ref)
+        self.assertIsNone(workbook["10 Risiko Tertinggi"].auto_filter.ref)
         self.assertIsNone(workbook["Detail Temuan"].auto_filter.ref)
         self.assertEqual(len(workbook["Tren Periode"]._charts), 1)
         self.assertEqual(len(workbook["Grafik Indikator"]._charts), 1)
@@ -336,7 +340,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn('action="/reports/excel"', response.text)
         self.assertIn('formaction="/reports/pdf"', response.text)
         self.assertIn("Tabel Detail FEWS", response.text)
-        self.assertIn("10 Risiko Terparah", response.text)
+        self.assertIn("10 Risiko Tertinggi", response.text)
 
     def test_real_pdf_export_contains_complete_report(self):
         self._login("admin2")

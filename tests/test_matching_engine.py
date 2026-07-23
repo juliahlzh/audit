@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import date, datetime, timedelta
 
@@ -108,6 +109,36 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertEqual(results[0].risk_score, 0)
         self.assertEqual(results[0].status, "MATCHED")
         self.assertEqual(results[0].follow_up_status, "RESOLVED")
+
+    def test_double_input_detects_same_transaction_and_transfer_proof(self):
+        db = self.Session()
+        input_at = datetime(2026, 7, 23, 10, 15)
+        payment_at = datetime(2026, 7, 23, 9, 45)
+        first = self._insert_branch(
+            invoice_code="INV-DUP-1",
+            proof_reference="TRX-BANK-001",
+            source_created_at=input_at,
+            payment_received_at=payment_at,
+            transaction_time="10:15",
+        )
+        second = self._insert_branch(
+            invoice_code="INV-DUP-2",
+            proof_reference=" trx-bank-001 ",
+            source_created_at=input_at,
+            payment_received_at=payment_at,
+            transaction_time="10:15",
+        )
+        db.add_all([first, second])
+        db.commit()
+
+        results = run_matching(db)
+
+        self.assertEqual(len(results), 2)
+        for result in results:
+            rules = json.loads(result.triggered_rules)
+            self.assertIn("double_input", {rule["code"] for rule in rules})
+            self.assertGreaterEqual(result.risk_score, 5)
+            self.assertIn("ditemukan 2 kali", result.match_reason)
 
 
 if __name__ == "__main__":

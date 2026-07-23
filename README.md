@@ -4,10 +4,10 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 
 ## Fitur
 
-- Dashboard ranking wilayah per periode, KPI, grafik garis enam periode, grafik indikator, dan grafik lokasi.
+- Dashboard ringkas dengan grafik tren temuan per wilayah/lokasi yang dapat di-zoom dan di-scroll, KPI utama, penyebab per lokasi, dan detail prioritas.
 - Menu Info memuat indikator, aturan skor, tren approval, indikator teratas, prioritas investigasi, dan aktivitas dari dashboard awal.
 - Filter wilayah, area, lokasi, periode bulanan/mingguan, jenis kesalahan, dan status verifikasi.
-- Ranking lokasi lengkap serta tabel 10 risiko terparah dan 10 risiko terendah.
+- Ranking lokasi lengkap serta tabel 10 risiko tertinggi dan 10 risiko terendah.
 - Tabel `ID Unix–Kesalahan–Jumlah–Skor` sesuai layout SOP.
 - Ekspor PDF dan Excel per wilayah dengan konteks filter, grafik tren/indikator/lokasi, top/bottom 10, dan tabel detail; ekspor nasional tanpa wilayah ditolak.
 - Master organisasi: 15 wilayah, 41 area, dan 166 lokasi dengan kode lokasi SIL resmi.
@@ -20,6 +20,8 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 
 Manual input tetap dinonaktifkan. Upload Excel/CSV hanya tersedia untuk Admin Pusat; kode lokasi SIL divalidasi dan dipetakan otomatis. Upload harian menambahkan histori, sedangkan `idunix` yang sudah ada diperlakukan sebagai koreksi: versi sebelumnya diarsipkan dan versi baru menjadi aktif. Perubahan status/verifikasi hanya dapat dilakukan oleh admin atau auditor; akun wilayah hanya melihat data.
 
+Dashboard tidak memuat form upload. Admin Pusat menggunakan menu **Upload Data**, sedangkan menu **Laporan** memuat tabel lengkap, verifikasi, ranking, serta export PDF/Excel.
+
 ## Aturan SOP aktif
 
 - Input pada rentang waktu perhatian 00.01–05.00.
@@ -28,6 +30,7 @@ Manual input tetap dinonaktifkan. Upload Excel/CSV hanya tersedia untuk Admin Pu
 - Keterlambatan H+3 dan seterusnya dinilai bertingkat; lebih dari H+10 menjadi warning merah.
 - Tanggal input dan tanggal setor tidak konsisten.
 - Jumlah biaya tidak sesuai jumlah setor.
+- Double Input Bukti Transfer: fingerprint transaksi dan referensi bukti transfer yang sama ditemukan lebih dari satu kali.
 
 Detail scope dan kriteria penerimaan ada di [`docs/frontend_redesign_prd.md`](docs/frontend_redesign_prd.md). Implementasi rule ada di [`app/services/rule_config.py`](app/services/rule_config.py).
 

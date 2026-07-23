@@ -1,60 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header monitoring-header">
-    <div><h2>{{ 'Dashboard Wilayah ' ~ user.region if user.region else 'Dashboard Pusat FEWS' }}</h2><p class="muted">{{ 'View-only untuk wilayah akun; ranking nasional tetap tersedia.' if user.region else 'Monitoring nasional, pengelolaan data, dan prioritas risiko FEWS.' }}</p></div>
+    <div><h2>{{ 'Dashboard Wilayah ' ~ user.region if user.region else 'Dashboard Pusat FEWS' }}</h2><p class="muted">{{ 'Ringkasan wilayah akun; perbandingan nasional tetap tersedia.' if user.region else 'Ringkasan nasional dan prioritas risiko FEWS.' }}</p></div>
 </div>
-
-{% if user.role == 'admin' and not user.region %}
-<section class="monitor-panel central-upload-panel">
-    <div class="central-upload-copy">
-        <h3>Upload Excel ke FEWS</h3>
-        <p>Unggah data approval SIL. Kode lokasi akan otomatis dipetakan ke nama lokasi, area, dan wilayah.</p>
-        <small>Upload harian menambah histori. ID Unix yang sudah ada diperbarui dan versi lamanya tetap tersimpan sebagai audit trail.</small>
-    </div>
-    <form method="post" action="/branch-inputs/upload" enctype="multipart/form-data" class="central-upload-form" data-upload-form>
-        <label class="file-drop compact-file-drop">
-            <input type="file" name="excel_file" accept=".xlsx,.csv" required>
-            <strong>Pilih file Excel/CSV</strong>
-            <span class="file-hint">Maksimal 25.000 baris; kolom kodelokasi dan idunix wajib tersedia</span>
-        </label>
-        <div class="central-upload-actions">
-            <a class="secondary-button" href="/templates/approval-import.xlsx">Download Template</a>
-            <button type="submit" data-upload-button>Upload &amp; Proses</button>
-        </div>
-        <p class="upload-progress" data-upload-status role="status" aria-live="polite" hidden>File sedang divalidasi, disimpan, dan dianalisis. Jangan tutup halaman.</p>
-    </form>
-</section>
-{% endif %}
 
 {% set filter_action = '/dashboard' %}
 {% include '_monitoring_filters.html' %}
 
+{% include '_dashboard_trend_charts.html' %}
+
 <div class="monitor-kpis">
     <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Dalam hasil filter</small></div>
-    <div class="monitor-kpi warning"><span>Belum Diverifikasi</span><strong>{{ unverified }}</strong><small>{{ ((unverified / total * 100)|round(1)) if total else 0 }}% dari total</small></div>
-    <div class="monitor-kpi danger"><span>Risiko Tinggi</span><strong>{{ high }}</strong><small>Skor di atas 7</small></div>
-    <div class="monitor-kpi info"><span>Lokasi Terpantau</span><strong>{{ location_rows|length }}</strong><small>Pada periode aktif</small></div>
+    <div class="monitor-kpi danger"><span>Double Input</span><strong>{{ double_input_count }}</strong><small>Bukti transfer dan transaksi identik</small></div>
+    <div class="monitor-kpi warning location-kpi"><span>Lokasi Risiko Tertinggi</span><strong>{{ highest_risk_location.name if highest_risk_location else '—' }}</strong><small>{% if highest_risk_location %}Skor {{ highest_risk_location.score_total }} · {{ highest_risk_location.total }} temuan{% else %}Belum ada data{% endif %}</small></div>
+    <div class="monitor-kpi info location-kpi"><span>Lokasi Terbaik</span><strong>{{ best_location.name if best_location else '—' }}</strong><small>{% if best_location %}Skor {{ best_location.score_total }} · {{ best_location.total }} temuan{% else %}Belum ada data{% endif %}</small></div>
 </div>
 
-{% set displayed_region_rows = global_region_rows if user.region else region_rows %}
-<section class="monitor-panel national-ranking-panel">
-    <div class="monitor-panel-heading"><div><h3>Ranking Wilayah per Periode</h3><p>{{ 'Ranking nasional umum; detail tetap dibatasi ke wilayah akun.' if user.region else 'Diurutkan dari total skor terparah.' }}</p></div></div>
+<section class="monitor-panel location-cause-panel">
+    <div class="monitor-panel-heading">
+        <div><span class="section-kicker">03 · Indikator</span><h3>Penyebab Utama berdasarkan Lokasi</h3><p>Ringkasan indikator pada lokasi yang perlu diprioritaskan.</p></div>
+        <a href="/reports">Lihat laporan lengkap</a>
+    </div>
     <div class="table-wrap"><table class="ranking-table">
-        <thead><tr><th>Rank</th><th>Wilayah</th><th>Temuan</th><th>Total Skor</th><th>Skor Max</th><th>Risiko</th><th>Sudah</th><th>Belum</th></tr></thead>
-        <tbody>{% for row in displayed_region_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.total }}</td><td><strong>{{ row.score_total }}</strong></td><td>{{ row.max_score }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>{{ row.verified }}</td><td>{{ row.unverified }}</td></tr>{% else %}<tr><td colspan="8">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>Rank</th><th>Kode</th><th>Lokasi</th><th>Area</th><th>Temuan</th><th>Indikator Utama</th><th>Belum Diverifikasi</th></tr></thead>
+        <tbody>{% for row in location_indicator_rows %}<tr><td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td><td><strong>{{ row.code or '—' }}</strong></td><td><strong>{{ row.name }}</strong></td><td>{{ row.area }}</td><td>{{ row.total }}</td><td>{{ row.indicator_summary }}</td><td>{{ row.unverified }}</td></tr>{% else %}<tr><td colspan="7">Belum ada data pada filter ini.</td></tr>{% endfor %}</tbody>
     </table></div>
 </section>
 
-{% set chart_prefix = 'dashboard' %}
-{% include '_monitoring_visuals.html' %}
-{% include '_ranking_tables.html' %}
-
 <section class="monitor-panel finding-table-panel">
-    <div class="monitor-panel-heading"><div><h3>Detail Temuan FEWS</h3><p>ID Unix, kesalahan, jumlah kesalahan, skor, dan status verifikasi.</p></div><a href="/reports">Buka laporan</a></div>
+    <div class="monitor-panel-heading"><div><span class="section-kicker">04 · Detail</span><h3>Detail Temuan Terbaru</h3><p>Ringkasan 10 transaksi prioritas; seluruh detail dan verifikasi tersedia di menu Laporan.</p></div><a href="/reports">Buka laporan</a></div>
     <div class="table-wrap"><table class="wide-table detail-fews-table">
         <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Kode Lokasi</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Verifikasi</th></tr></thead>
-        <tbody>{% for row in recent_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td><strong>{{ row.branch_input.location_code or '—' }}</strong></td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="10">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+        <tbody>{% for row in dashboard_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td><strong>{{ row.branch_input.location_code or '—' }}</strong></td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td></tr>{% else %}<tr><td colspan="10">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
     </table></div>
-    {% if total > recent_rows|length %}<p class="table-note">Menampilkan {{ recent_rows|length }} temuan terbaru. Seluruh detail tersedia pada menu Laporan dan export wilayah.</p>{% endif %}
+    {% if total > dashboard_rows|length %}<p class="table-note">Menampilkan {{ dashboard_rows|length }} temuan terbaru. Seluruh detail tersedia pada menu Laporan dan export wilayah.</p>{% endif %}
 </section>
 {% endblock %}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
@@ -153,6 +154,31 @@ def _late_input_rule(method: str, late_days: int) -> tuple[str, int, str]:
     return rule_code, score, severity
 
 
+def _normalize_fingerprint_text(value: str | None) -> str:
+    return " ".join((value or "").strip().casefold().split())
+
+
+def _duplicate_fingerprint(branch: BranchInput) -> tuple | None:
+    proof_reference = _normalize_fingerprint_text(branch.proof_reference)
+    if not proof_reference:
+        return None
+    return (
+        branch.transaction_date,
+        branch.source_created_at,
+        branch.payment_received_at,
+        branch.bank_date,
+        branch.deposit_date,
+        _normalize_fingerprint_text(branch.transaction_time),
+        _normalize_fingerprint_text(branch.location_code or branch.branch_name),
+        _normalize_fingerprint_text(branch.customer_name),
+        round(float(branch.amount_should_pay or 0), 2),
+        round(float(branch.amount_input_branch or 0), 2),
+        _payment_method_key(branch.payment_method),
+        _normalize_fingerprint_text(branch.destination_account),
+        proof_reference,
+    )
+
+
 def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[MatchingResult]:
     query = db.query(BranchInput).filter(BranchInput.archived_at.is_(None))
     if branch_ids is None:
@@ -184,6 +210,14 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
     attention_end = attention_window.get("end_minute", attention_window["end_hour"] * 60)
     attention_label = attention_window.get("label", f"{attention_window['start_hour']:02d}:00-{attention_window['end_hour']:02d}:00")
     late_input_max_days = RULE_CONFIG["late_input_max_days"]
+    duplicate_counts = Counter(
+        fingerprint
+        for fingerprint in (
+            _duplicate_fingerprint(row)
+            for row in db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).all()
+        )
+        if fingerprint is not None
+    )
     results: list[MatchingResult] = []
     for item in branch_inputs:
         triggered: list[dict[str, str | int | bool]] = []
@@ -264,6 +298,20 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
                     "Jumlah biaya harus sama dengan jumlah setor",
                     f"Jumlah biaya tidak sama dengan jumlah setor: biaya Rp {item.amount_should_pay:,.0f}, setor Rp {item.amount_input_branch:,.0f}. Kemungkinan salah input, double input, atau nominal setor tidak sesuai.",
                     source_field="amount_should_pay/amount_input_branch",
+                )
+            )
+
+        duplicate_fingerprint = _duplicate_fingerprint(item)
+        if duplicate_fingerprint and duplicate_counts[duplicate_fingerprint] > 1:
+            rule_score = RULE_CONFIG["score"]["double_input"]
+            score += rule_score
+            triggered.append(
+                _trigger(
+                    "double_input",
+                    f"Referensi bukti {item.proof_reference}; ditemukan {duplicate_counts[duplicate_fingerprint]} data aktif identik",
+                    "Fingerprint transaksi dan referensi bukti transfer harus unik",
+                    f"Data transaksi dengan bukti transfer {item.proof_reference} ditemukan {duplicate_counts[duplicate_fingerprint]} kali pada data aktif.",
+                    source_field="transaction_date/source_created_at/payment_received_at/bank_date/deposit_date/location/customer/amount/payment_method/destination_account/proof_reference",
                 )
             )
 
