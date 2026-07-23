@@ -286,60 +286,6 @@ def filter_options(db: Session, user: User, selected_region: str = "", selected_
     }
 
 
-def build_group_trends(
-    results,
-    group_by: str,
-    period_type: str = "bulanan",
-    month: str = "",
-    week: str = "",
-    limit: int = 10,
-):
-    """Build multi-series finding counts for region/location dashboard charts."""
-    period_type = "mingguan" if period_type == "mingguan" else "bulanan"
-    start, _ = _period_bounds(period_type, month, week)
-    dated = [row for row in results if row.branch_input and row.branch_input.transaction_date]
-    latest = max((row.branch_input.transaction_date for row in dated), default=date.today())
-
-    if period_type == "mingguan":
-        end_period = start or (latest - timedelta(days=latest.weekday()))
-        periods = [end_period + timedelta(weeks=offset) for offset in range(-5, 1)]
-        keys = {item.strftime("%G-W%V"): index for index, item in enumerate(periods)}
-        labels = [f"M{item.isocalendar().week} {item.isocalendar().year}" for item in periods]
-        key_for_date = lambda value: value.strftime("%G-W%V")
-    else:
-        end_period = start or latest.replace(day=1)
-        periods = [_shift_month(end_period, offset) for offset in range(-5, 1)]
-        keys = {item.strftime("%Y-%m"): index for index, item in enumerate(periods)}
-        labels = [f"{MONTH_NAMES_ID[item.month - 1]} {item.year}" for item in periods]
-        key_for_date = lambda value: value.strftime("%Y-%m")
-
-    grouped: dict[str, list[int]] = defaultdict(lambda: [0] * len(periods))
-    totals = Counter()
-    for result in dated:
-        branch = result.branch_input
-        period_index = keys.get(key_for_date(branch.transaction_date))
-        if period_index is None:
-            continue
-        if group_by == "region":
-            label = branch.region
-        else:
-            code = branch.location_code or location_code_for_name(branch.branch_name)
-            label = f"{code} — {branch.branch_name}" if code else branch.branch_name
-        grouped[label][period_index] += 1
-        totals[label] += 1
-
-    selected = sorted(grouped, key=lambda label: (-totals[label], label))[:limit]
-    return {
-        "period_type": period_type,
-        "labels": labels,
-        "series": [
-            {"name": label, "values": grouped[label], "total": totals[label]}
-            for label in selected
-        ],
-        "unit": "temuan",
-    }
-
-
 def build_monitoring_context(db: Session, user: User, filters: dict):
     filters = dict(filters)
     if filters.get("location"):
@@ -370,22 +316,6 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         filters.get("month", ""),
         filters.get("week", ""),
     )
-    region_trend = build_group_trends(
-        trend_scope,
-        "region",
-        filters.get("period_type", "bulanan"),
-        filters.get("month", ""),
-        filters.get("week", ""),
-        limit=15,
-    )
-    location_trend = build_group_trends(
-        trend_scope,
-        "location",
-        filters.get("period_type", "bulanan"),
-        filters.get("month", ""),
-        filters.get("week", ""),
-        limit=10,
-    )
     double_input_count = sum(1 for result in scoped if "double_input" in _rule_codes(result))
     return {
         "filters": filters,
@@ -410,8 +340,23 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         ],
         "trend": trend,
         "trend_analysis": trend["analysis"],
-        "region_trend": region_trend,
-        "location_trend": location_trend,
+        "region_bar_rows": [
+            {
+                "name": row["name"],
+                "value": row["total"],
+                "score_total": row["score_total"],
+            }
+            for row in region_rows
+        ],
+        "dashboard_location_bar_rows": [
+            {
+                "name": f"{row['code']} — {row['name']}" if row.get("code") else row["name"],
+                "value": row["total"],
+                "score_total": row["score_total"],
+                "area": row["area"],
+            }
+            for row in location_rows
+        ],
         "indicator_rows": indicator_rows[:10],
         "location_indicator_rows": location_rows[:10],
         "highest_risk_location": location_rows[0] if location_rows else None,
@@ -426,23 +371,3 @@ def build_global_region_ranking(db: Session, user: User, filters: dict):
     ranking_filters = {**filters, "region": "", "area": "", "location": ""}
     rows = filtered_results(db, user, **ranking_filters, enforce_user_scope=False)
     return summarize_rankings(rows, "region")
-
-
-def build_global_region_trend(db: Session, user: User, filters: dict):
-    """Grafik nasional untuk akun wilayah tanpa membuka detail transaksi wilayah lain."""
-    ranking_filters = {**filters, "region": "", "area": "", "location": ""}
-    rows = filtered_results(
-        db,
-        user,
-        **ranking_filters,
-        apply_month=False,
-        enforce_user_scope=False,
-    )
-    return build_group_trends(
-        rows,
-        "region",
-        filters.get("period_type", "bulanan"),
-        filters.get("month", ""),
-        filters.get("week", ""),
-        limit=15,
-    )

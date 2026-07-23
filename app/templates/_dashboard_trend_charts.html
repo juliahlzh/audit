@@ -3,8 +3,8 @@
         <div class="monitor-panel-heading chart-heading">
             <div>
                 <span class="section-kicker">01 · Wilayah</span>
-                <h3>Tren Temuan per Wilayah</h3>
-                <p>{{ 'Perbandingan nasional; detail transaksi tetap terkunci ke wilayah akun.' if user.region else 'Jumlah temuan tiap wilayah selama enam periode terakhir.' }}</p>
+                <h3>Temuan per Wilayah</h3>
+                <p>{{ 'Perbandingan nasional pada periode aktif; detail transaksi tetap terkunci ke wilayah akun.' if user.region else 'Seluruh wilayah pada hasil filter, diurutkan dari jumlah temuan terbanyak.' }}</p>
             </div>
             <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik wilayah">
                 <button type="button" data-chart-action="out" data-chart-target="region" aria-label="Perkecil grafik wilayah">−</button>
@@ -12,10 +12,9 @@
                 <button type="button" data-chart-action="in" data-chart-target="region" aria-label="Perbesar grafik wilayah">+</button>
             </div>
         </div>
-        <div class="interactive-chart-scroll" data-chart-scroll="region" tabindex="0" aria-label="Grafik tren temuan per wilayah; dapat digulir horizontal">
-            <div id="dashboard-region-trend" class="multi-line-chart"></div>
+        <div class="interactive-chart-scroll region-chart-scroll" data-chart-scroll="region" tabindex="0" aria-label="Grafik batang temuan per wilayah; dapat digulir">
+            <div id="dashboard-region-bars" class="horizontal-bar-chart" data-chart-type="bar"></div>
         </div>
-        <div id="dashboard-region-legend" class="chart-legend" aria-label="Legenda wilayah"></div>
         <details class="ranking-disclosure">
             <summary>Lihat ranking wilayah periode aktif</summary>
             <div class="table-wrap">
@@ -31,8 +30,8 @@
         <div class="monitor-panel-heading chart-heading">
             <div>
                 <span class="section-kicker">02 · Lokasi</span>
-                <h3>Tren Temuan per Lokasi</h3>
-                <p>Sepuluh lokasi dengan temuan terbanyak selama enam periode terakhir.</p>
+                <h3>Temuan per Lokasi</h3>
+                <p>Seluruh lokasi pada hasil filter, diurutkan dari jumlah temuan terbanyak.</p>
             </div>
             <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik lokasi">
                 <button type="button" data-chart-action="out" data-chart-target="location" aria-label="Perkecil grafik lokasi">−</button>
@@ -40,64 +39,52 @@
                 <button type="button" data-chart-action="in" data-chart-target="location" aria-label="Perbesar grafik lokasi">+</button>
             </div>
         </div>
-        <div class="interactive-chart-scroll" data-chart-scroll="location" tabindex="0" aria-label="Grafik tren temuan per lokasi; dapat digulir horizontal">
-            <div id="dashboard-location-trend" class="multi-line-chart"></div>
+        <div class="interactive-chart-scroll location-chart-scroll" data-chart-scroll="location" tabindex="0" aria-label="Grafik batang temuan per lokasi; dapat digulir">
+            <div id="dashboard-location-bars" class="horizontal-bar-chart" data-chart-type="bar"></div>
         </div>
-        <div id="dashboard-location-legend" class="chart-legend" aria-label="Legenda lokasi"></div>
     </section>
 </div>
 
-<script type="application/json" id="dashboard-region-trend-data">{{ region_trend|tojson }}</script>
-<script type="application/json" id="dashboard-location-trend-data">{{ location_trend|tojson }}</script>
+<script type="application/json" id="dashboard-region-bar-data">{{ region_bar_rows|tojson }}</script>
+<script type="application/json" id="dashboard-location-bar-data">{{ dashboard_location_bar_rows|tojson }}</script>
 <script>
 (() => {
     const chartStates = new Map();
-    const palette = [
-        "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)",
-        "var(--chart-6)", "var(--chart-7)", "var(--chart-8)", "var(--chart-9)", "var(--chart-10)",
-        "var(--chart-11)", "var(--chart-12)", "var(--chart-13)", "var(--chart-14)", "var(--chart-15)"
-    ];
     const escapeText = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 
     const renderChart = name => {
-        const data = JSON.parse(document.getElementById(`dashboard-${name}-trend-data`).textContent || "{}");
-        const target = document.getElementById(`dashboard-${name}-trend`);
-        const legend = document.getElementById(`dashboard-${name}-legend`);
+        const data = JSON.parse(document.getElementById(`dashboard-${name}-bar-data`).textContent || "[]");
+        const target = document.getElementById(`dashboard-${name}-bars`);
         const state = chartStates.get(name) || {zoom: 1};
         chartStates.set(name, state);
-        const series = data.series || [];
-        const labels = data.labels || [];
-        const width = Math.max(780, labels.length * 132);
-        const height = 330;
-        const pad = {left: 52, right: 24, top: 22, bottom: 54};
-        const allValues = series.flatMap(item => item.values || []);
+        const rows = Array.isArray(data) ? data : [];
         document.querySelectorAll(`[data-chart-target="${name}"]`).forEach(button => {
-            button.disabled = !series.length;
+            button.disabled = !rows.length;
         });
-        const maxValue = Math.max(4, ...allValues);
-        const plotWidth = width - pad.left - pad.right;
-        const plotHeight = height - pad.top - pad.bottom;
-        const x = index => pad.left + (labels.length <= 1 ? 0 : index * plotWidth / (labels.length - 1));
-        const y = value => pad.top + plotHeight - (Number(value || 0) / maxValue * plotHeight);
-        const grid = [0, .25, .5, .75, 1].map(ratio => {
-            const gridY = pad.top + plotHeight * ratio;
-            return `<line x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}" class="chart-grid"/><text x="${pad.left - 10}" y="${gridY + 4}" text-anchor="end" class="chart-axis">${Math.round(maxValue * (1 - ratio))}</text>`;
-        }).join("");
-        const xLabels = labels.map((label, index) => `<text x="${x(index)}" y="${height - 24}" text-anchor="middle" class="chart-axis">${escapeText(label)}</text>`).join("");
-        const paths = series.map((item, seriesIndex) => {
-            const color = palette[seriesIndex % palette.length];
-            const points = (item.values || []).map((value, index) => `${x(index)},${y(value)}`).join(" ");
-            const dots = (item.values || []).map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="var(--surface)" stroke="${color}" stroke-width="2"><title>${escapeText(item.name)} · ${escapeText(labels[index])}: ${value} temuan</title></circle>`).join("");
-            return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
-        }).join("");
-        if (!series.length) {
-            target.innerHTML = `<div class="chart-empty">Belum ada data tren untuk filter ini.</div>`;
-            legend.innerHTML = "";
+        if (!rows.length) {
+            target.innerHTML = `<div class="chart-empty">Belum ada data temuan untuk filter ini.</div>`;
             document.querySelector(`[data-chart-action="reset"][data-chart-target="${name}"]`).textContent = "100%";
             return;
         }
-        target.innerHTML = `<svg viewBox="0 0 ${width} ${height}" style="width:${width * state.zoom}px" role="img" aria-label="Jumlah temuan per ${name === "region" ? "wilayah" : "lokasi"}">${grid}${xLabels}${paths}</svg>`;
-        legend.innerHTML = series.map((item, index) => `<span><i style="background:${palette[index % palette.length]}"></i>${escapeText(item.name)} <strong>${item.total}</strong></span>`).join("");
+        const maxValue = Math.max(1, ...rows.map(row => Number(row.value || 0)));
+        const minimumWidth = Math.round(780 * state.zoom);
+        target.style.minWidth = `${minimumWidth}px`;
+        target.style.width = `${state.zoom * 100}%`;
+        target.innerHTML = rows.map((row, index) => {
+            const value = Number(row.value || 0);
+            const percentage = value / maxValue * 100;
+            const category = name === "region" ? "Wilayah" : "Lokasi";
+            const tooltip = `${category} ${row.name}: ${value} temuan · Total skor ${Number(row.score_total || 0)}`;
+            return `<div class="dashboard-bar-row" data-chart-row="${name}" title="${escapeText(tooltip)}" aria-label="${escapeText(tooltip)}">
+                <div class="dashboard-bar-label">
+                    <span><small>${String(index + 1).padStart(2, "0")}</small>${escapeText(row.name)}</span>
+                    <strong>${value}</strong>
+                </div>
+                <div class="dashboard-bar-track" aria-hidden="true">
+                    <span class="dashboard-bar-fill" style="width:${percentage}%"></span>
+                </div>
+            </div>`;
+        }).join("");
         document.querySelector(`[data-chart-action="reset"][data-chart-target="${name}"]`).textContent = `${Math.round(state.zoom * 100)}%`;
     };
 

@@ -219,16 +219,56 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn("JBR-1", response.text)
         self.assertNotIn("JBR-W25", response.text)
         for heading in [
-            "Tren Temuan per Wilayah", "Tren Temuan per Lokasi",
+            "Temuan per Wilayah", "Temuan per Lokasi",
             "Penyebab Utama berdasarkan Lokasi", "Detail Temuan Terbaru",
         ]:
             self.assertIn(heading, response.text)
+        self.assertEqual(response.text.count('data-chart-type="bar"'), 2)
         self.assertIn('data-chart-action="in"', response.text)
         self.assertIn('data-chart-action="out"', response.text)
         self.assertIn('data-chart-action="reset"', response.text)
         self.assertNotIn("Upload Excel ke FEWS", response.text)
         self.assertIn('value="mingguan" selected', response.text)
         self.assertIn('value="2026-W24"', response.text)
+
+    def test_dashboard_bar_data_contains_every_filtered_location_without_top_ten_limit(self):
+        for index in range(12):
+            self._add_result(
+                region="Jawa Barat",
+                location=f"Lokasi Uji {index + 1:02d}",
+                invoice=f"BAR-{index + 1:02d}",
+                score=(index % 9) + 1,
+                follow_up="OPEN",
+                code="amount_mismatch",
+                name="Jumlah biaya tidak sesuai jumlah setor",
+            )
+        self.db.commit()
+
+        context = build_monitoring_context(
+            self.db,
+            self.admin,
+            {
+                "region": "Jawa Barat",
+                "area": "",
+                "location": "",
+                "period_type": "bulanan",
+                "month": "2026-06",
+                "week": "",
+                "indicator": "",
+                "verification": "",
+            },
+        )
+
+        self.assertEqual(
+            len(context["dashboard_location_bar_rows"]),
+            len(context["location_rows"]),
+        )
+        self.assertEqual(len(context["dashboard_location_bar_rows"]), 13)
+        self.assertIn(
+            "Lokasi Uji 12",
+            [row["name"] for row in context["dashboard_location_bar_rows"]],
+        )
+        self.assertTrue(all(row["value"] >= 1 for row in context["dashboard_location_bar_rows"]))
 
     def test_area_filter_limits_results(self):
         self._login("admin2")

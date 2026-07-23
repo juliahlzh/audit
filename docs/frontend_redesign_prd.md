@@ -61,8 +61,9 @@ Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanj
 Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas input maksimal H+2 hari kerja dari tanggal bank dan warning merah setelah lebih dari H+10. Layout memuat:
 
 - indikator `Double Input Bukti Transfer`: dua atau lebih data aktif dengan fingerprint transaksi yang sama (tanggal/waktu input, tanggal bank/setor, waktu pembayaran, lokasi, customer, nominal, metode pembayaran, dan rekening tujuan) serta `proof_reference` bukti transfer yang sama; ID Unix boleh berbeda;
-- Dashboard ringkas dengan urutan grafik tren temuan per wilayah, grafik tren temuan per lokasi, kartu indikator utama, daftar penyebab per lokasi, lalu detail temuan ringkas di bagian paling bawah;
-- grafik wilayah/lokasi berbasis jumlah temuan, bukan skor sebagai fokus utama, serta mendukung scroll horizontal dan kontrol zoom in, zoom out, dan reset;
+- Dashboard ringkas dengan urutan grafik batang temuan per wilayah, grafik batang temuan per lokasi, kartu indikator utama, daftar penyebab per lokasi, lalu detail temuan ringkas di bagian paling bawah;
+- grafik wilayah/lokasi berupa horizontal bar chart berbasis jumlah temuan, bukan skor, dan selalu merender seluruh kategori hasil filter tanpa batas top-10;
+- grafik batang mendukung tooltip jumlah temuan dan total skor, scroll internal horizontal/vertikal, serta kontrol zoom in, zoom out, dan reset;
 - tabel ID Unix, kesalahan, jumlah kesalahan, dan skor;
 - grafik batang per indikator dan per lokasi;
 - grafik garis perbandingan enam periode bulanan atau mingguan beserta analisis perubahan periode terakhir;
@@ -100,7 +101,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Response memakai header keamanan dasar dan session cookie production memakai `Secure`, `SameSite=Lax`, serta secret dari environment.
 - Filter area memengaruhi data secara nyata.
 - Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
-- Grafik garis wilayah/lokasi, grafik indikator, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Grafik batang wilayah/lokasi, grafik garis tren periode, grafik indikator, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
 - Informasi yang tampil pada Dashboard dan Laporan mempunyai padanan data pada PDF dan Excel untuk filter wilayah yang sama.
 - Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
 

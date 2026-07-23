@@ -1747,11 +1747,16 @@ summary:focus-visible {
 .interactive-chart-scroll {
     max-width: 100%;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
     padding: 2px 0 10px;
     border-block: 1px solid var(--line);
     scrollbar-color: var(--line-strong) var(--bg);
-    overscroll-behavior-inline: contain;
+    overscroll-behavior: contain;
+}
+
+.region-chart-scroll,
+.location-chart-scroll {
+    max-height: 620px;
 }
 
 .interactive-chart-scroll:focus-visible {
@@ -1769,6 +1774,86 @@ summary:focus-visible {
     max-width: none;
     height: 330px;
     transition: width 160ms ease;
+}
+
+.horizontal-bar-chart {
+    display: grid;
+    gap: 12px;
+    min-width: 780px;
+    padding: 16px 8px 16px 0;
+    transition: min-width 160ms ease, width 160ms ease;
+}
+
+.dashboard-bar-row {
+    display: grid;
+    grid-template-columns: minmax(210px, 300px) minmax(440px, 1fr);
+    align-items: center;
+    gap: 16px;
+    min-height: 38px;
+    padding: 3px 8px;
+    border-radius: 7px;
+}
+
+.dashboard-bar-row:hover {
+    background: var(--surface-soft);
+}
+
+.dashboard-bar-label {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text);
+    font-size: 12px;
+}
+
+.dashboard-bar-label span {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-bar-label small {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+}
+
+.dashboard-bar-label strong {
+    flex: 0 0 auto;
+    color: var(--nav);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-bar-track {
+    height: 17px;
+    overflow: hidden;
+    border-radius: 4px;
+    background:
+        linear-gradient(90deg, transparent 24.7%, var(--line) 25%, transparent 25.3%),
+        linear-gradient(90deg, transparent 49.7%, var(--line) 50%, transparent 50.3%),
+        linear-gradient(90deg, transparent 74.7%, var(--line) 75%, transparent 75.3%),
+        var(--bg);
+}
+
+.dashboard-bar-fill {
+    display: block;
+    min-width: 3px;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent-bright);
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-strong) 30%, transparent);
+    transition: width 180ms ease;
+}
+
+.dashboard-bar-row:hover .dashboard-bar-fill {
+    background: var(--accent-strong);
 }
 
 .interactive-chart-panel .chart-legend {
@@ -1885,6 +1970,10 @@ summary:focus-visible {
     .chart-toolbar { width: max-content; }
     .multi-line-chart,
     .multi-line-chart svg { min-height: 280px; height: 280px; }
+    .region-chart-scroll,
+    .location-chart-scroll { max-height: 520px; }
+    .horizontal-bar-chart { min-width: 700px; }
+    .dashboard-bar-row { grid-template-columns: minmax(190px, 250px) minmax(400px, 1fr); }
     .interactive-chart-panel .chart-legend { display: grid; grid-template-columns: 1fr; }
     .monitoring-header { align-items: flex-start; }
     .export-form,

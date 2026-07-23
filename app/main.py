@@ -38,7 +38,6 @@ from .seed import seed_data
 from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
 from .services.analytics import (
     build_global_region_ranking,
-    build_global_region_trend,
     build_monitoring_context,
     filter_options,
     filtered_results,
@@ -651,8 +650,15 @@ def dashboard(
     }
     data = build_monitoring_context(db, user, filters)
     data["global_region_rows"] = build_global_region_ranking(db, user, filters)
-    if user.region:
-        data["region_trend"] = build_global_region_trend(db, user, filters)
+    region_chart_source = data["global_region_rows"] if user.region else data["region_rows"]
+    data["region_bar_rows"] = [
+        {
+            "name": row["name"],
+            "value": row["total"],
+            "score_total": row["score_total"],
+        }
+        for row in region_chart_source
+    ]
     context = {
         "request": request,
         "user": user,
