@@ -68,6 +68,10 @@ Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas i
 - KPI Admin Wilayah mencakup total lokasi, temuan, high/medium/low risk, total dan rata-rata skor wilayah, serta lokasi paling berisiko di wilayah;
 - grafik Admin Pusat menampilkan distribusi risiko, total skor, dan jumlah temuan per wilayah, tren risiko nasional, serta komposisi high/medium/low;
 - grafik Admin Wilayah memakai data lokasi di wilayahnya untuk distribusi, total skor, dan jumlah temuan, ditambah tren serta komposisi risiko wilayah;
+- Dashboard menampilkan grafik batang vertikal jumlah kemunculan untuk seluruh indikator SOP. Grafik memakai seluruh wilayah sebagai tampilan awal Admin Pusat, lalu berubah menjadi seluruh lokasi dalam wilayah ketika filter wilayah dipilih atau akun wilayah digunakan;
+- Dashboard menampilkan komposisi indikator per wilayah/lokasi sebagai batang vertikal bertumpuk. Setiap warna selalu dipasangkan dengan nama indikator pada legenda dan tooltip, dan kategori bernilai nol tetap ditampilkan;
+- Dashboard menampilkan perkembangan jumlah kemunculan indikator selama enam periode. Pilihan `bulanan` mengelompokkan data bulan per bulan dan pilihan `mingguan` mengelompokkan data minggu ISO per minggu sampai periode filter yang dipilih;
+- daftar lengkap jenis indikator SOP, kategori, jumlah kemunculan, dan total skor indikator ditempatkan tepat di bawah grafik indikator;
 - grafik wilayah/lokasi berupa horizontal bar chart berbasis jumlah temuan, bukan skor, dan selalu merender seluruh kategori hasil filter tanpa batas top-10;
 - grafik batang mendukung tooltip jumlah temuan dan total skor, scroll internal horizontal/vertikal, serta kontrol zoom in, zoom out, dan reset;
 - panel Lokasi Paling Berisiko dan Lokasi Paling Aman memuat skor, jumlah temuan, level risiko, serta seluruh indikator penyebab yang diurutkan berdasarkan frekuensi;
@@ -105,6 +109,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Dashboard tidak menampilkan form upload; menu `Upload Data` tetap tersedia khusus Admin Pusat.
 - Dashboard menampilkan KPI sebelum grafik, ringkasan indikator risiko setelah grafik, dan tabel hanya pada bagian paling bawah.
 - Seluruh KPI, grafik, panel risiko, ranking, dan detail berubah mengikuti filter aktif.
+- Grafik indikator vertikal memuat semua indikator SOP, grafik komposisi menampilkan semua 15 wilayah pada cakupan nasional dan semua lokasi pada cakupan satu wilayah, serta tren jumlah indikator berubah konsisten antara agregasi bulanan dan mingguan.
 - Admin Pusat mendapat seluruh KPI dan analitik nasional; Admin Wilayah hanya mendapat analitik detail wilayahnya dengan ringkasan ranking wilayah nasional yang aman.
 - Risk Ranking #1 selalu merupakan lokasi/wilayah dengan total skor tertinggi; daftar teraman diurutkan dari skor terendah.
 - Halaman Ranking Nasional Lokasi dan Wilayah tersedia tanpa membuka detail lintas wilayah bagi akun regional.

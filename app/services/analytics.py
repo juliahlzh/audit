@@ -421,6 +421,65 @@ def filter_options(db: Session, user: User, selected_region: str = "", selected_
     }
 
 
+def build_indicator_trend(
+    results,
+    period_type: str = "bulanan",
+    month: str = "",
+    week: str = "",
+):
+    """Hitung jumlah kemunculan indikator dalam enam bulan atau minggu terakhir."""
+    period_type = "mingguan" if period_type == "mingguan" else "bulanan"
+    start, _ = _period_bounds(period_type, month, week)
+    dated = [row for row in results if row.branch_input and row.branch_input.transaction_date]
+    latest = max((row.branch_input.transaction_date for row in dated), default=date.today())
+
+    if period_type == "mingguan":
+        end_period = start or (latest - timedelta(days=latest.weekday()))
+        periods = [end_period + timedelta(weeks=offset) for offset in range(-5, 1)]
+        keys = {item.strftime("%G-W%V"): index for index, item in enumerate(periods)}
+        labels = [f"M{item.isocalendar().week} {item.isocalendar().year}" for item in periods]
+        key_for_date = lambda value: value.strftime("%G-W%V")
+    else:
+        end_period = start or latest.replace(day=1)
+        periods = [_shift_month(end_period, offset) for offset in range(-5, 1)]
+        keys = {item.strftime("%Y-%m"): index for index, item in enumerate(periods)}
+        labels = [f"{MONTH_NAMES_ID[item.month - 1]} {item.year}" for item in periods]
+        key_for_date = lambda value: value.strftime("%Y-%m")
+
+    values = [0] * len(periods)
+    for result in dated:
+        key = key_for_date(result.branch_input.transaction_date)
+        if key in keys:
+            values[keys[key]] += len(_rule_codes(result))
+
+    previous = values[-2] if len(values) > 1 else 0
+    current = values[-1] if values else 0
+    delta = current - previous
+    if delta > 0:
+        direction = "naik"
+        recommendation = "Periksa wilayah, lokasi, dan jenis indikator penyumbang kenaikan terbesar."
+    elif delta < 0:
+        direction = "turun"
+        recommendation = "Pastikan penurunan konsisten dan temuan terbuka tetap ditindaklanjuti."
+    else:
+        direction = "stabil"
+        recommendation = "Lanjutkan pemantauan pada indikator yang masih muncul di periode aktif."
+    comparison = f"{abs(delta)} indikator" if previous == 0 else f"{abs(delta / previous * 100):.1f}%"
+    return {
+        "period_type": period_type,
+        "period_label": "Mingguan" if period_type == "mingguan" else "Bulanan",
+        "labels": labels,
+        "values": values,
+        "analysis": {
+            "direction": direction,
+            "headline": f"Jumlah indikator {direction} {comparison} dari periode sebelumnya",
+            "recommendation": recommendation,
+            "current": current,
+            "previous": previous,
+        },
+    }
+
+
 def build_monitoring_context(db: Session, user: User, filters: dict):
     filters = dict(filters)
     if filters.get("location"):
@@ -452,10 +511,23 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         for name in names:
             indicator_scores[name] += result.risk_score or 0
     indicator_rows = [
-        {"name": name, "value": count, "score": indicator_scores[name]}
-        for name, count in indicator_counts.most_common()
+        {
+            "code": code,
+            "name": rule["name"],
+            "category": rule["category"],
+            "value": indicator_counts[rule["name"]],
+            "score": indicator_scores[rule["name"]],
+        }
+        for code, rule in RULE_CONFIG["rules"].items()
     ]
+    indicator_rows.sort(key=lambda row: (-row["value"], row["name"]))
     trend = build_trend(
+        trend_scope,
+        filters.get("period_type", "bulanan"),
+        filters.get("month", ""),
+        filters.get("week", ""),
+    )
+    indicator_trend = build_indicator_trend(
         trend_scope,
         filters.get("period_type", "bulanan"),
         filters.get("month", ""),
@@ -470,7 +542,30 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
     )
     low_count = len(scoped) - high_count - medium_count
     total_score = sum(row.risk_score or 0 for row in scoped)
-    executive_group_rows = executive_location_rows if user.region else executive_region_rows
+    use_location_groups = bool(user.region or filters.get("region"))
+    executive_group_rows = executive_location_rows if use_location_groups else executive_region_rows
+    executive_group_type = "location" if use_location_groups else "region"
+    group_indicator_counts = defaultdict(Counter)
+    for result in scoped:
+        branch = result.branch_input
+        if not branch:
+            continue
+        group_name = branch.branch_name if use_location_groups else branch.region
+        group_indicator_counts[group_name].update(_rule_codes(result))
+    indicator_group_chart_rows = []
+    for row in executive_group_rows:
+        counts = group_indicator_counts[row["name"]]
+        indicator_group_chart_rows.append(
+            {
+                "name": (
+                    f"{row['code']} — {row['name']}"
+                    if use_location_groups and row.get("code")
+                    else row["name"]
+                ),
+                "total": sum(counts.values()),
+                "values": {item["code"]: counts[item["code"]] for item in indicator_rows},
+            }
+        )
     return {
         "filters": filters,
         "filter_options": filter_options(db, user, filters.get("region", ""), filters.get("area", "")),
@@ -490,11 +585,12 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         "location_rows": location_rows,
         "executive_region_rows": executive_region_rows,
         "executive_location_rows": executive_location_rows,
-        "executive_group_type": "location" if user.region else "region",
+        "executive_group_type": executive_group_type,
+        "executive_group_label": "Lokasi" if use_location_groups else "Wilayah",
         "executive_group_rows": executive_group_rows,
         "executive_group_chart_rows": [
             {
-                "name": f"{row['code']} — {row['name']}" if user.region and row.get("code") else row["name"],
+                "name": f"{row['code']} — {row['name']}" if use_location_groups and row.get("code") else row["name"],
                 "total": row["total"],
                 "score_total": row["score_total"],
                 "high": row["high"],
@@ -519,6 +615,10 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         ],
         "trend": trend,
         "trend_analysis": trend["analysis"],
+        "indicator_trend": indicator_trend,
+        "indicator_trend_analysis": indicator_trend["analysis"],
+        "indicator_chart_rows": indicator_rows,
+        "indicator_group_chart_rows": indicator_group_chart_rows,
         "region_bar_rows": [
             {
                 "name": row["name"],
@@ -536,7 +636,7 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
             }
             for row in location_rows
         ],
-        "indicator_rows": indicator_rows[:10],
+        "indicator_rows": indicator_rows,
         "location_indicator_rows": location_rows[:10],
         "highest_risk_region": executive_region_rows[0] if scoped and executive_region_rows else None,
         "best_region": safest_region_rows[0] if safest_region_rows else None,

@@ -14,6 +14,14 @@
     --exec-low: oklch(53% .13 150);
     --exec-low-soft: oklch(97% .02 150);
     --exec-focus: oklch(65% .16 245);
+    --exec-series-off-hour: oklch(52% .15 250);
+    --exec-series-pre-payment: oklch(57% .14 290);
+    --exec-series-late-transfer: oklch(61% .16 42);
+    --exec-series-late-cash: oklch(69% .15 78);
+    --exec-series-date: oklch(58% .12 190);
+    --exec-series-amount: oklch(49% .18 25);
+    --exec-series-double: oklch(48% .13 330);
+    --exec-series-trend: var(--exec-brand);
     --exec-space-3xs: 4px;
     --exec-space-2xs: 8px;
     --exec-space-xs: 12px;

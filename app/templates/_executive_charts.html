@@ -1,14 +1,58 @@
 <section class="executive-section" aria-labelledby="executive-chart-heading">
     <div class="executive-section-heading">
         <div>
-            <h3 id="executive-chart-heading">Analisis Risiko {{ user.region or 'Nasional' }}</h3>
-            <p>Seluruh grafik mengikuti filter dan menampilkan {{ 'lokasi di wilayah akun' if user.region else 'wilayah dalam cakupan' }}.</p>
+            <h3 id="executive-chart-heading">Analisis Risiko {{ user.region or filters.region or 'Nasional' }}</h3>
+            <p>Seluruh grafik mengikuti filter dan menampilkan {{ 'lokasi dalam wilayah terpilih' if executive_group_type == 'location' else 'seluruh wilayah nasional' }}.</p>
         </div>
     </div>
     <div class="executive-chart-grid">
+        <article class="executive-chart-panel">
+            <div class="executive-chart-heading">
+                <div><h4>Jumlah Temuan per Indikator</h4><p>Frekuensi kemunculan seluruh indikator SOP pada filter aktif.</p></div>
+            </div>
+            <div class="executive-chart-scroll vertical-scroll" tabindex="0">
+                <div id="executive-indicator-chart" class="executive-vertical-chart" role="img" aria-label="Grafik batang vertikal jumlah temuan per indikator"></div>
+            </div>
+        </article>
+        <article class="executive-chart-panel">
+            <div class="executive-chart-heading">
+                <div><h4>Perkembangan Indikator {{ indicator_trend.period_label }}</h4><p>Jumlah kemunculan indikator selama enam {{ 'minggu' if indicator_trend.period_type == 'mingguan' else 'bulan' }} terakhir.</p></div>
+            </div>
+            <div class="executive-chart-scroll vertical-scroll" tabindex="0">
+                <div id="executive-indicator-trend-chart" class="executive-vertical-chart compact" role="img" aria-label="Grafik batang perkembangan indikator {{ indicator_trend.period_label|lower }}"></div>
+            </div>
+            <div class="executive-trend-note trend-{{ indicator_trend_analysis.direction }}"><strong>{{ indicator_trend_analysis.headline }}</strong><span>{{ indicator_trend_analysis.recommendation }}</span></div>
+        </article>
         <article class="executive-chart-panel chart-wide">
             <div class="executive-chart-heading">
-                <div><h4>Distribusi Risiko per {{ 'Lokasi' if user.region else 'Wilayah' }}</h4><p>Komposisi High, Medium, dan Low Risk.</p></div>
+                <div><h4>Komposisi Indikator per {{ executive_group_label }}</h4><p>{{ 'Seluruh wilayah nasional' if executive_group_type == 'region' else 'Seluruh lokasi dalam wilayah terpilih' }} tetap ditampilkan, termasuk kategori tanpa temuan.</p></div>
+            </div>
+            <div class="executive-series-legend" aria-label="Legenda indikator">
+                {% for indicator in indicator_chart_rows %}
+                <span class="series-{{ indicator.code }}">{{ indicator.name }}</span>
+                {% endfor %}
+            </div>
+            <div class="executive-chart-scroll vertical-scroll" tabindex="0">
+                <div id="executive-group-indicator-chart" class="executive-stacked-vertical-chart" role="img" aria-label="Grafik batang vertikal komposisi indikator per {{ executive_group_label|lower }}"></div>
+            </div>
+        </article>
+        <article class="executive-chart-panel chart-wide executive-indicator-catalog">
+            <div class="executive-chart-heading">
+                <div><h4>Macam-macam Indikator SOP</h4><p>Daftar lengkap indikator yang dipakai FEWS beserta jumlah kemunculan dan akumulasi skor pada filter aktif.</p></div>
+            </div>
+            <ol class="executive-indicator-catalog-grid">
+                {% for indicator in indicator_chart_rows %}
+                <li>
+                    <span class="indicator-swatch series-{{ indicator.code }}" aria-hidden="true"></span>
+                    <div><strong>{{ indicator.name }}</strong><small>{{ indicator.category }}</small></div>
+                    <dl><div><dt>Temuan</dt><dd>{{ indicator.value }}</dd></div><div><dt>Skor</dt><dd>{{ indicator.score }}</dd></div></dl>
+                </li>
+                {% endfor %}
+            </ol>
+        </article>
+        <article class="executive-chart-panel chart-wide">
+            <div class="executive-chart-heading">
+                <div><h4>Distribusi Risiko per {{ executive_group_label }}</h4><p>Komposisi High, Medium, dan Low Risk.</p></div>
                 <div class="executive-chart-legend"><span class="high">High</span><span class="medium">Medium</span><span class="low">Low</span></div>
             </div>
             <div class="executive-chart-scroll" tabindex="0">
@@ -17,20 +61,20 @@
         </article>
         <article class="executive-chart-panel">
             <div class="executive-chart-heading">
-                <div><h4>Total Skor Risiko per {{ 'Lokasi' if user.region else 'Wilayah' }}</h4><p>Urutan prioritas investigasi.</p></div>
+                <div><h4>Total Skor Risiko per {{ executive_group_label }}</h4><p>Urutan prioritas investigasi.</p></div>
                 <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik skor"><button type="button" data-exec-zoom="out" data-exec-target="score">−</button><button type="button" data-exec-zoom="reset" data-exec-target="score">100%</button><button type="button" data-exec-zoom="in" data-exec-target="score">+</button></div>
             </div>
             <div class="executive-chart-scroll" tabindex="0"><div id="executive-score-chart" class="executive-chart-canvas"></div></div>
         </article>
         <article class="executive-chart-panel">
             <div class="executive-chart-heading">
-                <div><h4>Jumlah Temuan per {{ 'Lokasi' if user.region else 'Wilayah' }}</h4><p>Volume temuan pada periode aktif.</p></div>
+                <div><h4>Jumlah Temuan per {{ executive_group_label }}</h4><p>Volume temuan pada periode aktif.</p></div>
                 <div class="chart-toolbar" role="group" aria-label="Kontrol zoom grafik temuan"><button type="button" data-exec-zoom="out" data-exec-target="finding">−</button><button type="button" data-exec-zoom="reset" data-exec-target="finding">100%</button><button type="button" data-exec-zoom="in" data-exec-target="finding">+</button></div>
             </div>
             <div class="executive-chart-scroll" tabindex="0"><div id="executive-finding-chart" class="executive-chart-canvas"></div></div>
         </article>
         <article class="executive-chart-panel">
-            <div class="executive-chart-heading"><div><h4>Tren Risiko {{ 'Wilayah' if user.region else 'Nasional' }}</h4><p>Perubahan total skor enam periode terakhir.</p></div></div>
+            <div class="executive-chart-heading"><div><h4>Tren Risiko {{ user.region or filters.region or 'Nasional' }}</h4><p>Perubahan total skor enam periode terakhir.</p></div></div>
             <div id="executive-trend-chart" class="executive-line-chart" role="img" aria-label="Grafik tren risiko"></div>
             <div class="executive-trend-note trend-{{ trend_analysis.direction }}"><strong>{{ trend_analysis.headline }}</strong><span>{{ trend_analysis.recommendation }}</span></div>
         </article>
@@ -44,13 +88,45 @@
 <script type="application/json" id="executive-group-data">{{ executive_group_chart_rows|tojson }}</script>
 <script type="application/json" id="executive-trend-data">{{ trend|tojson }}</script>
 <script type="application/json" id="executive-risk-data">{{ risk_distribution|tojson }}</script>
+<script type="application/json" id="executive-indicator-data">{{ indicator_chart_rows|tojson }}</script>
+<script type="application/json" id="executive-indicator-trend-data">{{ indicator_trend|tojson }}</script>
+<script type="application/json" id="executive-group-indicator-data">{{ indicator_group_chart_rows|tojson }}</script>
 <script>
 (() => {
     const rows = JSON.parse(document.getElementById("executive-group-data").textContent || "[]");
     const trend = JSON.parse(document.getElementById("executive-trend-data").textContent || "{}");
     const overall = JSON.parse(document.getElementById("executive-risk-data").textContent || "[]");
+    const indicators = JSON.parse(document.getElementById("executive-indicator-data").textContent || "[]");
+    const indicatorTrend = JSON.parse(document.getElementById("executive-indicator-trend-data").textContent || "{}");
+    const indicatorGroups = JSON.parse(document.getElementById("executive-group-indicator-data").textContent || "[]");
     const escapeText = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const zoom = {score: 1, finding: 1};
+
+    const renderVerticalBars = (targetId, chartRows) => {
+        const target = document.getElementById(targetId);
+        const maxValue = Math.max(1, ...chartRows.map(row => Number(row.value || 0)));
+        target.innerHTML = chartRows.length ? chartRows.map(row => {
+            const value = Number(row.value || 0);
+            const tooltip = `${row.name}: ${value} kemunculan indikator`;
+            return `<div class="executive-vertical-column" tabindex="0" title="${escapeText(tooltip)}" aria-label="${escapeText(tooltip)}"><strong>${value}</strong><div class="executive-vertical-track"><i class="${row.code ? `series-${escapeText(row.code)}` : "series-trend"}" style="height:${value / maxValue * 100}%"></i></div><span>${escapeText(row.name)}</span></div>`;
+        }).join("") : '<div class="chart-empty">Belum ada data indikator pada filter aktif.</div>';
+    };
+
+    const renderIndicatorGroups = () => {
+        const target = document.getElementById("executive-group-indicator-chart");
+        const maxValue = Math.max(1, ...indicatorGroups.map(row => Number(row.total || 0)));
+        target.innerHTML = indicatorGroups.length ? indicatorGroups.map(row => {
+            const total = Number(row.total || 0);
+            const segments = indicators.map(indicator => {
+                const value = Number(row.values?.[indicator.code] || 0);
+                if (!value) return "";
+                const tooltip = `${row.name} — ${indicator.name}: ${value}`;
+                return `<i class="series-${escapeText(indicator.code)}" style="height:${value / total * 100}%" title="${escapeText(tooltip)}"></i>`;
+            }).join("");
+            const tooltip = `${row.name}: ${total} kemunculan indikator`;
+            return `<div class="executive-stack-column" tabindex="0" title="${escapeText(tooltip)}" aria-label="${escapeText(tooltip)}"><strong>${total}</strong><div class="executive-stack-vertical-track"><div style="height:${total / maxValue * 100}%">${segments}</div></div><span>${escapeText(row.name)}</span></div>`;
+        }).join("") : '<div class="chart-empty">Belum ada wilayah atau lokasi pada cakupan ini.</div>';
+    };
 
     const renderDistribution = () => {
         const target = document.getElementById("executive-risk-distribution");
@@ -95,6 +171,12 @@
         target.innerHTML = `<div class="executive-risk-total"><strong>${overall.reduce((sum,row) => sum + Number(row.value || 0), 0)}</strong><span>Total temuan</span></div><div class="executive-risk-segments">${overall.map(row => `<div class="${row.tone}" title="${escapeText(row.name)}: ${row.value}"><i style="width:${row.value / total * 100}%"></i><span>${escapeText(row.name)}</span><strong>${row.value}</strong><small>${(row.value / total * 100).toFixed(1)}%</small></div>`).join("")}</div>`;
     };
 
+    renderVerticalBars("executive-indicator-chart", indicators);
+    renderVerticalBars(
+        "executive-indicator-trend-chart",
+        (indicatorTrend.labels || []).map((name, index) => ({name, value: indicatorTrend.values?.[index] || 0}))
+    );
+    renderIndicatorGroups();
     renderDistribution(); renderBars("score", "score_total", "risk"); renderBars("finding", "total", "finding"); renderTrend(); renderOverall();
     document.querySelectorAll("[data-exec-zoom]").forEach(button => button.addEventListener("click", () => {
         const target = button.dataset.execTarget;

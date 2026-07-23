@@ -16,8 +16,16 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import BranchInput, MatchingResult, User
 from app.services.analytics import build_monitoring_context
-from app.services.organization import ORGANIZATION_CODE_ROWS, ORGANIZATION_ROWS, REGIONAL_ACCOUNTS, resolve_location
+from app.services.organization import (
+    ORGANIZATION_CODE_ROWS,
+    ORGANIZATION_ROWS,
+    REGIONAL_ACCOUNTS,
+    REGIONS,
+    locations_for_scope,
+    resolve_location,
+)
 from app.services.reports import build_ranked_excel_report
+from app.services.rule_config import RULE_CONFIG
 from app.services.sample_loader import load_sample_file
 
 
@@ -269,7 +277,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn("Bandung", response.text)
         self.assertNotIn('data-search=" bogor', response.text.lower())
         for heading in [
-            "Ringkasan Risiko Nasional", "Analisis Risiko Nasional",
+            "Ringkasan Risiko Nasional", "Analisis Risiko Jawa Barat",
             "Indikator Risiko Tertinggi dan Terendah", "Risk Ranking", "Detail Data",
         ]:
             self.assertIn(heading, response.text)
@@ -321,6 +329,116 @@ class MonitoringFeatureTests(unittest.TestCase):
             [row["name"] for row in context["dashboard_location_bar_rows"]],
         )
         self.assertTrue(all(row["value"] >= 1 for row in context["dashboard_location_bar_rows"]))
+
+    def test_indicator_charts_show_all_rules_and_switch_from_regions_to_locations(self):
+        self._add_result(
+            region="Bandung Raya", location="Buah Batu", invoice="BDR-IND", score=4,
+            follow_up="OPEN", code="amount_mismatch",
+            name="Jumlah biaya tidak sesuai jumlah setor",
+        )
+        self.db.commit()
+        national = build_monitoring_context(
+            self.db,
+            self.admin,
+            {
+                "region": "",
+                "area": "",
+                "location": "",
+                "period_type": "bulanan",
+                "month": "2026-06",
+                "week": "",
+                "indicator": "",
+                "verification": "",
+            },
+        )
+        regional = build_monitoring_context(
+            self.db,
+            self.admin,
+            {
+                "region": "Bandung Raya",
+                "area": "",
+                "location": "",
+                "period_type": "bulanan",
+                "month": "2026-06",
+                "week": "",
+                "indicator": "",
+                "verification": "",
+            },
+        )
+
+        self.assertEqual(
+            {row["code"] for row in national["indicator_chart_rows"]},
+            set(RULE_CONFIG["rules"]),
+        )
+        self.assertEqual(national["executive_group_type"], "region")
+        self.assertTrue(
+            set(REGIONS).issubset({row["name"] for row in national["indicator_group_chart_rows"]})
+        )
+        self.assertEqual(regional["executive_group_type"], "location")
+        self.assertEqual(
+            len(regional["indicator_group_chart_rows"]),
+            len(locations_for_scope("Bandung Raya")),
+        )
+        self.assertEqual(
+            sum(row["total"] for row in national["indicator_group_chart_rows"]),
+            sum(row["value"] for row in national["indicator_chart_rows"]),
+        )
+
+    def test_indicator_trend_changes_between_monthly_and_weekly_buckets(self):
+        self._add_result(
+            region="Jawa Barat", location="Bandung", invoice="JBR-MAY", score=4,
+            follow_up="OPEN", code="late_input_transfer",
+            name="Keterlambatan input data setor transfer",
+            transaction_date=date(2026, 5, 15),
+        )
+        self._add_result(
+            region="Jawa Barat", location="Bandung", invoice="JBR-W25", score=4,
+            follow_up="OPEN", code="amount_mismatch",
+            name="Jumlah biaya tidak sesuai jumlah setor",
+            transaction_date=date(2026, 6, 17),
+        )
+        self.db.commit()
+        base = {
+            "region": "Jawa Barat",
+            "area": "",
+            "location": "",
+            "indicator": "",
+            "verification": "",
+        }
+
+        monthly = build_monitoring_context(
+            self.db,
+            self.admin,
+            {**base, "period_type": "bulanan", "month": "2026-06", "week": ""},
+        )["indicator_trend"]
+        weekly = build_monitoring_context(
+            self.db,
+            self.admin,
+            {**base, "period_type": "mingguan", "month": "", "week": "2026-W25"},
+        )["indicator_trend"]
+
+        self.assertEqual(monthly["period_label"], "Bulanan")
+        self.assertEqual(monthly["labels"][-2:], ["Mei 2026", "Jun 2026"])
+        self.assertEqual(monthly["values"][-2:], [1, 2])
+        self.assertEqual(weekly["period_label"], "Mingguan")
+        self.assertEqual(weekly["labels"][-2:], ["M24 2026", "M25 2026"])
+        self.assertEqual(weekly["values"][-2:], [1, 1])
+
+    def test_dashboard_renders_vertical_indicator_charts_and_catalog(self):
+        self._login("admin2")
+        response = self.client.get("/dashboard?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        for marker in [
+            'id="executive-indicator-chart"',
+            'id="executive-indicator-trend-chart"',
+            'id="executive-group-indicator-chart"',
+            "Macam-macam Indikator SOP",
+            "Komposisi Indikator per Wilayah",
+        ]:
+            self.assertIn(marker, response.text)
+        for rule in RULE_CONFIG["rules"].values():
+            self.assertIn(rule["name"], response.text)
 
     def test_area_filter_limits_results(self):
         self._login("admin2")
