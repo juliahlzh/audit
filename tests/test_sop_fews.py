@@ -204,6 +204,7 @@ class SopFewsTests(unittest.TestCase):
         db.add(
             self._insert_branch(
                 invoice_code="LATE-10-NOT-RED",
+                proof_reference="BUKTI-LATE-10",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 14),
                 bank_date=date(2026, 3, 14),
@@ -213,6 +214,7 @@ class SopFewsTests(unittest.TestCase):
         db.add(
             self._insert_branch(
                 invoice_code="LATE-11-RED",
+                proof_reference="BUKTI-LATE-11",
                 payment_method="transfer",
                 deposit_date=date(2026, 3, 14),
                 bank_date=date(2026, 3, 14),

@@ -1,0 +1,21 @@
+<section class="executive-section executive-kpi-section" aria-labelledby="executive-kpi-heading">
+    <div class="executive-section-heading">
+        <div><h3 id="executive-kpi-heading">Ringkasan Risiko {{ user.region or 'Nasional' }}</h3><p>Kondisi utama berdasarkan filter aktif.</p></div>
+    </div>
+    <div class="executive-kpi-grid">
+        {% if not user.region %}
+        <article class="executive-kpi"><span>Total Wilayah</span><strong>{{ region_total }}</strong><small>Wilayah dalam cakupan</small></article>
+        {% endif %}
+        <article class="executive-kpi"><span>Total Lokasi</span><strong>{{ location_total }}</strong><small>Lokasi dalam cakupan</small></article>
+        <article class="executive-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Hasil filter aktif</small></article>
+        <article class="executive-kpi risk-high"><span>High Risk</span><strong>{{ high }}</strong><small>Prioritas investigasi</small></article>
+        <article class="executive-kpi risk-medium"><span>Medium Risk</span><strong>{{ medium }}</strong><small>Perlu pemantauan</small></article>
+        <article class="executive-kpi risk-low"><span>Low Risk</span><strong>{{ low }}</strong><small>Risiko rendah</small></article>
+        <article class="executive-kpi score"><span>Total Skor Risiko {{ 'Wilayah' if user.region else 'Nasional' }}</span><strong>{{ total_score }}</strong><small>Akumulasi skor temuan</small></article>
+        <article class="executive-kpi score"><span>Rata-rata Skor Risiko</span><strong>{{ average_score }}</strong><small>Skor per temuan</small></article>
+        {% if not user.region %}
+        <article class="executive-kpi named"><span>Wilayah Paling Berisiko</span><strong>{{ highest_risk_region.name if highest_risk_region else '—' }}</strong><small>{% if highest_risk_region %}Skor {{ highest_risk_region.score_total }} · Rank #{{ highest_risk_region.rank }}{% else %}Belum ada temuan{% endif %}</small></article>
+        {% endif %}
+        <article class="executive-kpi named"><span>Lokasi Paling Berisiko</span><strong>{{ highest_risk_location.name if highest_risk_location else '—' }}</strong><small>{% if highest_risk_location %}Skor {{ highest_risk_location.score_total }} · {{ highest_risk_location.total }} temuan{% else %}Belum ada temuan{% endif %}</small></article>
+    </div>
+</section>

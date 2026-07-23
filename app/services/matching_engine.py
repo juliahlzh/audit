@@ -163,19 +163,11 @@ def _duplicate_fingerprint(branch: BranchInput) -> tuple | None:
     if not proof_reference:
         return None
     return (
-        branch.transaction_date,
-        branch.source_created_at,
-        branch.payment_received_at,
-        branch.bank_date,
-        branch.deposit_date,
-        _normalize_fingerprint_text(branch.transaction_time),
-        _normalize_fingerprint_text(branch.location_code or branch.branch_name),
-        _normalize_fingerprint_text(branch.customer_name),
-        round(float(branch.amount_should_pay or 0), 2),
-        round(float(branch.amount_input_branch or 0), 2),
-        _payment_method_key(branch.payment_method),
-        _normalize_fingerprint_text(branch.destination_account),
         proof_reference,
+        round(float(branch.amount_input_branch or branch.amount_should_pay or 0), 2),
+        branch.transaction_date,
+        _payment_method_key(branch.payment_method),
+        _normalize_fingerprint_text(branch.location_code or branch.branch_name),
     )
 
 
@@ -309,9 +301,9 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
                 _trigger(
                     "double_input",
                     f"Referensi bukti {item.proof_reference}; ditemukan {duplicate_counts[duplicate_fingerprint]} data aktif identik",
-                    "Fingerprint transaksi dan referensi bukti transfer harus unik",
-                    f"Data transaksi dengan bukti transfer {item.proof_reference} ditemukan {duplicate_counts[duplicate_fingerprint]} kali pada data aktif.",
-                    source_field="transaction_date/source_created_at/payment_received_at/bank_date/deposit_date/location/customer/amount/payment_method/destination_account/proof_reference",
+                    "Nomor bukti, nominal, tanggal transaksi, jenis transaksi, dan lokasi harus unik",
+                    f"Data dengan nomor bukti {item.proof_reference}, nominal Rp {(item.amount_input_branch or item.amount_should_pay or 0):,.0f}, tanggal {_date_label(item.transaction_date)}, jenis {item.payment_method}, dan lokasi {item.branch_name} ditemukan {duplicate_counts[duplicate_fingerprint]} kali.",
+                    source_field="proof_reference/amount_input_branch/transaction_date/payment_method/location",
                 )
             )
 

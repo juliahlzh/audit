@@ -102,7 +102,7 @@ RULE_CONFIG = {
         "double_input": {
             "category": "Indikator Duplikasi Transaksi",
             "name": "Double Input Bukti Transfer",
-            "definition": "Data aktif dengan fingerprint transaksi dan referensi bukti transfer yang sama terindikasi sebagai input ganda meskipun ID Unix berbeda.",
+            "definition": "Data aktif dengan nomor bukti, nominal, tanggal transaksi, jenis transaksi, dan lokasi yang sama terindikasi sebagai input ganda meskipun ID Unix atau metadata lainnya berbeda.",
             "description": "Data transaksi dan bukti transfer yang sama ditemukan lebih dari satu kali.",
             "recommendation": "Periksa bukti transfer dan ID Unix terkait, lalu arsipkan entri duplikat melalui mekanisme koreksi agar audit trail tetap terjaga.",
             "clarification_required": True,

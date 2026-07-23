@@ -1,0 +1,25 @@
+<section class="executive-section" aria-labelledby="risk-insight-heading">
+    <div class="executive-section-heading"><div><h3 id="risk-insight-heading">Indikator Risiko Tertinggi dan Terendah</h3><p>Lokasi yang perlu ditangani lebih dahulu dan lokasi dengan kepatuhan terbaik.</p></div></div>
+    <div class="executive-risk-panels">
+        <article class="executive-risk-panel highest">
+            <div class="executive-risk-panel-heading"><span aria-hidden="true">H</span><div><h4>Lokasi Paling Berisiko</h4><strong>{{ highest_risk_location.name if highest_risk_location else 'Belum ada temuan' }}</strong></div></div>
+            {% if highest_risk_location %}
+            <dl><div><dt>Total Skor Risiko</dt><dd>{{ highest_risk_location.score_total }}</dd></div><div><dt>Jumlah Temuan</dt><dd>{{ highest_risk_location.total }}</dd></div><div><dt>Level Risiko</dt><dd><span class="risk-badge risk-{{ highest_risk_location.risk_label|lower }}">{{ highest_risk_location.risk_label }}</span></dd></div></dl>
+            <div class="executive-indicator-list">
+                <h5>Indikator penyebab</h5>
+                {% for indicator in highest_risk_location.indicator_rows %}<div><span>{{ indicator.name }}</span><strong>{{ indicator.value }}</strong></div>{% else %}<p class="executive-empty-badge">Tidak terdapat indikator risiko.</p>{% endfor %}
+            </div>
+            {% endif %}
+        </article>
+        <article class="executive-risk-panel safest">
+            <div class="executive-risk-panel-heading"><span aria-hidden="true">L</span><div><h4>Lokasi Paling Aman</h4><strong>{{ best_location.name if best_location else 'Belum ada lokasi' }}</strong></div></div>
+            {% if best_location %}
+            <dl><div><dt>Total Skor Risiko</dt><dd>{{ best_location.score_total }}</dd></div><div><dt>Jumlah Temuan</dt><dd>{{ best_location.total }}</dd></div><div><dt>Level Risiko</dt><dd><span class="risk-badge risk-{{ best_location.risk_label|lower }}">{{ best_location.risk_label }}</span></dd></div></dl>
+            <div class="executive-indicator-list">
+                <h5>Indikator yang masih muncul</h5>
+                {% for indicator in best_location.indicator_rows %}<div><span>{{ indicator.name }}</span><strong>{{ indicator.value }}</strong></div>{% else %}<p class="executive-empty-badge">Tidak terdapat indikator risiko.</p>{% endfor %}
+            </div>
+            {% endif %}
+        </article>
+    </div>
+</section>

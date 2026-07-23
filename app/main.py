@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import csv
 from datetime import date, datetime, time, timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
 import logging
 import os
@@ -39,8 +40,10 @@ from .services.branch_inputs import archive_all_branch_inputs_with_results, arch
 from .services.analytics import (
     build_global_region_ranking,
     build_monitoring_context,
+    complete_region_rankings,
     filter_options,
     filtered_results,
+    previous_period_filters,
 )
 from .services.matching_engine import run_matching
 from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, resolve_location
@@ -649,16 +652,40 @@ def dashboard(
         "verification": verification,
     }
     data = build_monitoring_context(db, user, filters)
-    data["global_region_rows"] = build_global_region_ranking(db, user, filters)
-    region_chart_source = data["global_region_rows"] if user.region else data["region_rows"]
-    data["region_bar_rows"] = [
-        {
-            "name": row["name"],
-            "value": row["total"],
-            "score_total": row["score_total"],
-        }
-        for row in region_chart_source
-    ]
+    global_region_rows = complete_region_rankings(build_global_region_ranking(db, user, filters))
+    data["global_region_rows"] = global_region_rows
+    data["national_region_summary"] = None
+    if user.region:
+        current_index = next(
+            (index for index, row in enumerate(global_region_rows) if row["name"] == user.region),
+            None,
+        )
+        if current_index is not None:
+            current = global_region_rows[current_index]
+            previous_filters = previous_period_filters(filters)
+            previous_rank = None
+            if previous_filters:
+                previous_rows = complete_region_rankings(
+                    build_global_region_ranking(db, user, previous_filters)
+                )
+                previous = next((row for row in previous_rows if row["name"] == user.region), None)
+                previous_rank = previous["rank"] if previous else None
+            rank_delta = (previous_rank - current["rank"]) if previous_rank is not None else None
+            data["national_region_summary"] = {
+                **current,
+                "gap_above": (
+                    global_region_rows[current_index - 1]["score_total"] - current["score_total"]
+                    if current_index > 0
+                    else None
+                ),
+                "gap_below": (
+                    current["score_total"] - global_region_rows[current_index + 1]["score_total"]
+                    if current_index + 1 < len(global_region_rows)
+                    else None
+                ),
+                "previous_rank": previous_rank,
+                "rank_delta": rank_delta,
+            }
     context = {
         "request": request,
         "user": user,
@@ -667,6 +694,52 @@ def dashboard(
         "database_warning": get_database_warning(),
     }
     return templates.TemplateResponse(request=request, name="dashboard.html", context=context)
+
+
+@app.get("/rankings", response_class=HTMLResponse)
+def rankings_page(
+    request: Request,
+    scope: str = "location",
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    period_type: str = "bulanan",
+    month: str = "",
+    week: str = "",
+    indicator: str = "",
+    verification: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    scope = "region" if scope == "region" else "location"
+    filters = {
+        "region": region,
+        "area": area,
+        "location": location,
+        "period_type": period_type,
+        "month": month,
+        "week": week,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    data = build_monitoring_context(db, user, filters)
+    if scope == "region":
+        ranking_rows = complete_region_rankings(build_global_region_ranking(db, user, filters))
+        title = "Ranking Nasional Wilayah"
+    else:
+        ranking_rows = data["executive_location_rows"]
+        title = "Ranking Nasional Lokasi" if not user.region else f"Ranking Lokasi {user.region}"
+    return templates.TemplateResponse(
+        request=request,
+        name="rankings.html",
+        context={
+            "user": user,
+            **data,
+            "scope": scope,
+            "ranking_rows": ranking_rows,
+            "ranking_title": title,
+        },
+    )
 
 
 @app.get("/info", response_class=HTMLResponse)
@@ -1349,3 +1422,74 @@ def export_pdf(
     )
     region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_laporan.pdf"})
+
+
+@app.get("/reports/csv")
+def export_csv(
+    region: str = "",
+    area: str = "",
+    location: str = "",
+    period_type: str = "bulanan",
+    month: str = "",
+    week: str = "",
+    indicator: str = "",
+    verification: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    effective_region = (user.region or region).strip()
+    if not effective_region:
+        raise HTTPException(status_code=400, detail="Pilih satu wilayah sebelum mengekspor laporan.")
+    filters = {
+        "region": effective_region,
+        "area": area,
+        "location": location,
+        "period_type": period_type,
+        "month": month,
+        "week": week,
+        "indicator": indicator,
+        "verification": verification,
+    }
+    context = build_monitoring_context(db, user, filters)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Ranking",
+            "Kode Lokasi",
+            "Nama Lokasi",
+            "Wilayah",
+            "Area",
+            "Total Skor",
+            "Total Temuan",
+            "High Risk",
+            "Medium Risk",
+            "Low Risk",
+            "Level Risiko",
+            "Update Terakhir",
+        ]
+    )
+    for row in context["dashboard_detail_rows"]:
+        writer.writerow(
+            [
+                row["rank"],
+                row["code"],
+                row["name"],
+                row["region"],
+                row["area"],
+                row["score_total"],
+                row["total"],
+                row["high"],
+                row["medium"],
+                row["low"],
+                row["risk_label"],
+                row["latest_date"].isoformat() if row["latest_date"] else "",
+            ]
+        )
+    region_slug = re.sub(r"[^a-z0-9]+", "_", effective_region.casefold()).strip("_")
+    payload = "\ufeff" + output.getvalue()
+    return Response(
+        content=payload.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=fews_{region_slug}_ranking_lokasi.csv"},
+    )

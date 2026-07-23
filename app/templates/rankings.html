@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header monitoring-header executive-header">
+    <div><h2>{{ ranking_title }}</h2><p class="muted">Risk Rank #1 merupakan prioritas investigasi tertinggi.</p></div>
+    <a class="executive-back-link" href="/dashboard{% if request.url.query %}?{{ request.url.query }}{% endif %}">Kembali ke Dashboard</a>
+</div>
+
+{% set filter_action = '/rankings' %}
+{% include '_monitoring_filters.html' %}
+
+<section class="executive-section ranking-page-section">
+    <div class="executive-section-heading">
+        <div><h3>{{ ranking_title }}</h3><p>{{ ranking_rows|length }} kategori dalam hasil filter.</p></div>
+        <div class="ranking-scope-switch" role="group" aria-label="Jenis ranking">
+            <a class="{% if scope == 'location' %}active{% endif %}" href="/rankings?scope=location">Lokasi</a>
+            <a class="{% if scope == 'region' %}active{% endif %}" href="/rankings?scope=region">Wilayah</a>
+        </div>
+    </div>
+    <div class="executive-table-tools">
+        <label class="executive-search"><span>Search</span><input type="search" data-ranking-search placeholder="Cari {{ 'lokasi' if scope == 'location' else 'wilayah' }}"></label>
+        <label><span>Filter risiko</span><select data-ranking-risk><option value="">Semua Risiko</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option><option value="rendah">Rendah</option></select></label>
+    </div>
+    <div class="table-wrap">
+        <table class="executive-detail-table">
+            <thead><tr><th>Risk Rank</th>{% if scope == 'location' %}<th>Kode</th><th>Lokasi</th><th>Wilayah</th><th>Area</th>{% else %}<th>Wilayah</th>{% endif %}<th>Total Skor</th><th>Total Temuan</th><th>High</th><th>Medium</th><th>Low</th><th>Level Risiko</th><th>Update Terakhir</th></tr></thead>
+            <tbody>
+            {% for row in ranking_rows %}
+                <tr data-ranking-row data-search="{{ (row.code ~ ' ' ~ row.name ~ ' ' ~ row.area ~ ' ' ~ row.region)|lower }}" data-risk="{{ row.risk_label|lower }}">
+                    <td><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span></td>
+                    {% if scope == 'location' %}<td><strong>{{ row.code or '—' }}</strong></td><td>{{ row.name }}</td><td>{{ row.region }}</td><td>{{ row.area }}</td>{% else %}<td><strong>{{ row.name }}</strong></td>{% endif %}
+                    <td><strong>{{ row.score_total }}</strong></td><td>{{ row.total }}</td><td>{{ row.high }}</td><td>{{ row.medium }}</td><td>{{ row.low }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>{{ row.latest_date|date_id if row.latest_date else 'Belum ada temuan' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+(() => {
+    const search = document.querySelector("[data-ranking-search]");
+    const risk = document.querySelector("[data-ranking-risk]");
+    const rows = [...document.querySelectorAll("[data-ranking-row]")];
+    const render = () => {
+        const query = search.value.trim().toLowerCase();
+        rows.forEach(row => { row.hidden = Boolean((query && !row.dataset.search.includes(query)) || (risk.value && row.dataset.risk !== risk.value)); });
+    };
+    search.addEventListener("input", render);
+    risk.addEventListener("change", render);
+})();
+</script>
+{% endblock %}

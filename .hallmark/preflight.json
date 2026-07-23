@@ -1,0 +1,12 @@
+{
+  "surface": "existing FastAPI and Jinja application",
+  "genre": "modern-minimal",
+  "tone": "utilitarian executive dashboard",
+  "anchorHue": "FEWS blue",
+  "macrostructure": "Workbench",
+  "preserved": [
+    "FEWS blue and lime identity",
+    "existing sidebar navigation",
+    "server-rendered Jinja architecture"
+  ]
+}

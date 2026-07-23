@@ -170,6 +170,10 @@ def summarize_rankings(results, group_by: str):
     for row in grouped.values():
         row["avg_score"] = round(row["score_total"] / row["total"], 1) if row["total"] else 0
         row["risk_label"] = _risk_label(row["max_score"])
+        row["indicator_rows"] = [
+            {"name": name, "value": count}
+            for name, count in row["indicators"].most_common()
+        ]
         row["indicator_summary"] = "; ".join(
             f"{name} ({count})" for name, count in row["indicators"].most_common(3)
         ) or "Tidak ada indikator"
@@ -182,9 +186,140 @@ def summarize_rankings(results, group_by: str):
     return ranked
 
 
+def _empty_ranking_row(name: str, region: str, area: str = "", code: str = "") -> dict:
+    return {
+        "name": name,
+        "code": code,
+        "region": region,
+        "area": area,
+        "total": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "score_total": 0,
+        "max_score": 0,
+        "avg_score": 0,
+        "verified": 0,
+        "unverified": 0,
+        "indicators": Counter(),
+        "indicator_rows": [],
+        "indicator_summary": "Tidak ada indikator",
+        "latest_date": None,
+        "risk_label": "Rendah",
+    }
+
+
+def _rerank(rows: list[dict]) -> list[dict]:
+    rows.sort(
+        key=lambda item: (-item["score_total"], -item["high"], -item["medium"], -item["total"], item["name"])
+    )
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+    return rows
+
+
+def complete_region_rankings(rows: list[dict], selected_region: str = "") -> list[dict]:
+    """Tambahkan wilayah tanpa temuan agar dashboard eksekutif tidak menyembunyikan kategori."""
+    source = {row["name"]: row for row in rows}
+    names = [selected_region] if selected_region else list(REGIONS)
+    complete = [
+        source.get(name) or _empty_ranking_row(name=name, region=name)
+        for name in names
+    ]
+    complete.extend(row for name, row in source.items() if name not in names)
+    return _rerank(complete)
+
+
+def complete_location_rankings(rows: list[dict], user: User, filters: dict) -> list[dict]:
+    """Tambahkan lokasi master bernilai nol sesuai scope/filter dashboard."""
+    selected_region = user.region or filters.get("region", "")
+    selected_area = filters.get("area", "")
+    selected_location = filters.get("location", "")
+    names = locations_for_scope(selected_region, selected_area)
+    if selected_location:
+        names = [selected_location]
+
+    source = {row["name"]: row for row in rows}
+    complete = []
+    for name in names:
+        if name in source:
+            complete.append(source[name])
+            continue
+        region, area = scope_for_location(name)
+        complete.append(
+            _empty_ranking_row(
+                name=name,
+                code=location_code_for_name(name),
+                region=region or selected_region or "Belum Dipetakan",
+                area=area or selected_area or "Belum Dipetakan",
+            )
+        )
+    complete.extend(row for name, row in source.items() if name not in names)
+    return _rerank(complete)
+
+
+def _double_input_group_key(branch: BranchInput) -> tuple | None:
+    reference = " ".join((branch.proof_reference or "").strip().casefold().split())
+    if not reference:
+        return None
+    return (
+        reference,
+        round(float(branch.amount_input_branch or branch.amount_should_pay or 0), 2),
+        branch.transaction_date,
+        (branch.payment_method or "").strip().casefold(),
+        (branch.location_code or branch.branch_name or "").strip().casefold(),
+    )
+
+
+def build_double_input_groups(results) -> list[dict]:
+    grouped = defaultdict(list)
+    for result in results:
+        if "double_input" not in _rule_codes(result) or not result.branch_input:
+            continue
+        key = _double_input_group_key(result.branch_input)
+        if key:
+            grouped[key].append(result)
+    groups = []
+    for key, items in grouped.items():
+        branch = items[0].branch_input
+        groups.append(
+            {
+                "group_id": f"{branch.location_code or branch.branch_name}-{branch.transaction_date}-{branch.proof_reference}",
+                "proof_reference": branch.proof_reference,
+                "amount": branch.amount_input_branch or branch.amount_should_pay or 0,
+                "transaction_date": branch.transaction_date,
+                "payment_method": branch.payment_method,
+                "location_code": branch.location_code,
+                "location": branch.branch_name,
+                "count": len(items),
+                "rows": items,
+            }
+        )
+    return sorted(groups, key=lambda item: (-item["count"], item["location"], item["proof_reference"] or ""))
+
+
 def _shift_month(value: date, offset: int) -> date:
     absolute = value.year * 12 + value.month - 1 + offset
     return date(absolute // 12, absolute % 12 + 1, 1)
+
+
+def previous_period_filters(filters: dict) -> dict | None:
+    previous = dict(filters)
+    if filters.get("period_type") == "mingguan" and filters.get("week"):
+        start, _ = _week_bounds(filters["week"])
+        if not start:
+            return None
+        previous_start = start - timedelta(days=7)
+        iso = previous_start.isocalendar()
+        previous["week"] = f"{iso.year}-W{iso.week:02d}"
+        return previous
+    if filters.get("month"):
+        start, _ = _month_bounds(filters["month"])
+        if not start:
+            return None
+        previous["month"] = _shift_month(start, -1).strftime("%Y-%m")
+        return previous
+    return None
 
 
 def build_trend(results, period_type: str = "bulanan", month: str = "", week: str = ""):
@@ -299,6 +434,16 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
     trend_scope = filtered_results(db, user, **filters, apply_month=False)
     region_rows = summarize_rankings(scoped, "region")
     location_rows = summarize_rankings(scoped, "location")
+    executive_region_rows = complete_region_rankings(region_rows, user.region or filters.get("region", ""))
+    executive_location_rows = complete_location_rankings(location_rows, user, filters)
+    safest_region_rows = sorted(
+        executive_region_rows,
+        key=lambda item: (item["score_total"], item["total"], item["name"]),
+    )
+    safest_location_rows = sorted(
+        executive_location_rows,
+        key=lambda item: (item["score_total"], item["total"], item["name"]),
+    )
     indicator_counts = Counter()
     indicator_scores = Counter()
     for result in scoped:
@@ -317,19 +462,53 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         filters.get("week", ""),
     )
     double_input_count = sum(1 for result in scoped if "double_input" in _rule_codes(result))
+    high_count = sum(1 for row in scoped if (row.risk_score or 0) > RULE_CONFIG["risk_level"]["medium_max"])
+    medium_count = sum(
+        1
+        for row in scoped
+        if RULE_CONFIG["risk_level"]["low_max"] < (row.risk_score or 0) <= RULE_CONFIG["risk_level"]["medium_max"]
+    )
+    low_count = len(scoped) - high_count - medium_count
+    total_score = sum(row.risk_score or 0 for row in scoped)
+    executive_group_rows = executive_location_rows if user.region else executive_region_rows
     return {
         "filters": filters,
         "filter_options": filter_options(db, user, filters.get("region", ""), filters.get("area", "")),
         "total": len(scoped),
         "unverified": sum(1 for row in scoped if verification_label(row.follow_up_status).startswith("Belum")),
         "need_review": sum(1 for row in scoped if (row.risk_score or 0) > 0),
-        "high": sum(1 for row in scoped if (row.risk_score or 0) > RULE_CONFIG["risk_level"]["medium_max"]),
+        "high": high_count,
+        "medium": medium_count,
+        "low": low_count,
+        "total_score": total_score,
+        "average_score": round(total_score / len(scoped), 1) if scoped else 0,
         "double_input_count": double_input_count,
-        "region_total": len(region_rows),
+        "double_input_groups": build_double_input_groups(scoped),
+        "region_total": len(executive_region_rows),
+        "location_total": len(executive_location_rows),
         "region_rows": region_rows,
         "location_rows": location_rows,
+        "executive_region_rows": executive_region_rows,
+        "executive_location_rows": executive_location_rows,
+        "executive_group_type": "location" if user.region else "region",
+        "executive_group_rows": executive_group_rows,
+        "executive_group_chart_rows": [
+            {
+                "name": f"{row['code']} — {row['name']}" if user.region and row.get("code") else row["name"],
+                "total": row["total"],
+                "score_total": row["score_total"],
+                "high": row["high"],
+                "medium": row["medium"],
+                "low": row["low"],
+            }
+            for row in executive_group_rows
+        ],
+        "top_region_rows": executive_region_rows[:10],
+        "bottom_region_rows": safest_region_rows[:10],
         "top_location_rows": location_rows[:10],
         "bottom_location_rows": list(reversed(location_rows[-10:])),
+        "executive_top_location_rows": executive_location_rows[:10],
+        "executive_bottom_location_rows": safest_location_rows[:10],
         "location_chart_rows": [
             {
                 "name": f"{row['code']} — {row['name']}" if row.get("code") else row["name"],
@@ -359,8 +538,16 @@ def build_monitoring_context(db: Session, user: User, filters: dict):
         ],
         "indicator_rows": indicator_rows[:10],
         "location_indicator_rows": location_rows[:10],
-        "highest_risk_location": location_rows[0] if location_rows else None,
-        "best_location": location_rows[-1] if location_rows else None,
+        "highest_risk_region": executive_region_rows[0] if scoped and executive_region_rows else None,
+        "best_region": safest_region_rows[0] if safest_region_rows else None,
+        "highest_risk_location": executive_location_rows[0] if scoped and executive_location_rows else None,
+        "best_location": safest_location_rows[0] if safest_location_rows else None,
+        "risk_distribution": [
+            {"name": "High Risk", "value": high_count, "tone": "high"},
+            {"name": "Medium Risk", "value": medium_count, "tone": "medium"},
+            {"name": "Low Risk", "value": low_count, "tone": "low"},
+        ],
+        "dashboard_detail_rows": executive_location_rows,
         "detail_rows": scoped,
         "recent_rows": scoped[:20],
         "dashboard_rows": scoped[:10],

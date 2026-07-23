@@ -1,0 +1,35 @@
+:root {
+    --exec-paper: var(--surface);
+    --exec-paper-subtle: var(--bg);
+    --exec-ink: var(--text);
+    --exec-muted: var(--muted);
+    --exec-rule: var(--line);
+    --exec-brand: var(--accent-strong);
+    --exec-brand-soft: var(--surface-soft);
+    --exec-high: oklch(49% .19 27);
+    --exec-high-soft: oklch(97% .02 25);
+    --exec-medium: oklch(60% .16 55);
+    --exec-medium-soft: oklch(97% .03 70);
+    --exec-caution: oklch(75% .15 90);
+    --exec-low: oklch(53% .13 150);
+    --exec-low-soft: oklch(97% .02 150);
+    --exec-focus: oklch(65% .16 245);
+    --exec-space-3xs: 4px;
+    --exec-space-2xs: 8px;
+    --exec-space-xs: 12px;
+    --exec-space-sm: 16px;
+    --exec-space-md: 24px;
+    --exec-space-lg: 32px;
+    --exec-space-xl: 48px;
+    --exec-text-xs: 11px;
+    --exec-text-sm: 13px;
+    --exec-text-md: 15px;
+    --exec-text-lg: 18px;
+    --exec-text-xl: 24px;
+    --exec-radius-sm: 6px;
+    --exec-radius-md: 10px;
+    --exec-radius-lg: 14px;
+    --exec-ease-out: cubic-bezier(.16, 1, .3, 1);
+    --exec-duration: 160ms;
+    --exec-shadow: 0 8px 22px oklch(34% .08 245 / .07);
+}

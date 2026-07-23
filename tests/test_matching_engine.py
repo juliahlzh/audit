@@ -124,9 +124,12 @@ class MatchingEngineTests(unittest.TestCase):
         second = self._insert_branch(
             invoice_code="INV-DUP-2",
             proof_reference=" trx-bank-001 ",
-            source_created_at=input_at,
-            payment_received_at=payment_at,
-            transaction_time="10:15",
+            customer_name="Customer berbeda tidak memengaruhi fingerprint",
+            officer_id="U99",
+            destination_account="REKENING-BERBEDA",
+            source_created_at=input_at + timedelta(minutes=7),
+            payment_received_at=payment_at + timedelta(minutes=3),
+            transaction_time="10:22",
         )
         db.add_all([first, second])
         db.commit()
@@ -139,6 +142,30 @@ class MatchingEngineTests(unittest.TestCase):
             self.assertIn("double_input", {rule["code"] for rule in rules})
             self.assertGreaterEqual(result.risk_score, 5)
             self.assertIn("ditemukan 2 kali", result.match_reason)
+
+    def test_double_input_requires_all_five_business_keys_to_match(self):
+        db = self.Session()
+        common = {
+            "proof_reference": "BUKTI-EXACT-01",
+            "amount_input_branch": 1_000_000,
+            "transaction_date": date(2026, 7, 23),
+            "payment_method": "transfer",
+            "branch_name": "Cabang A",
+        }
+        first = self._insert_branch(invoice_code="INV-KEY-1", **common)
+        different_location = self._insert_branch(
+            invoice_code="INV-KEY-2",
+            **{**common, "branch_name": "Cabang B"},
+        )
+        db.add_all([first, different_location])
+        db.commit()
+
+        results = run_matching(db)
+
+        self.assertEqual(len(results), 2)
+        for result in results:
+            rules = json.loads(result.triggered_rules)
+            self.assertNotIn("double_input", {rule["code"] for rule in rules})
 
 
 if __name__ == "__main__":

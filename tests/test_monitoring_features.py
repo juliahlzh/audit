@@ -94,6 +94,55 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertNotIn('action="/branch-inputs/upload"', response.text)
         self.assertNotIn("legacy-info", response.text)
 
+    def test_executive_dashboard_has_role_specific_kpis_and_interactive_detail(self):
+        self._login("admin2")
+        central = self.client.get("/dashboard?month=2026-06")
+
+        for label in [
+            "Total Wilayah", "Total Lokasi", "Total Temuan", "High Risk",
+            "Medium Risk", "Low Risk", "Total Skor Risiko Nasional",
+            "Rata-rata Skor Risiko", "Wilayah Paling Berisiko", "Lokasi Paling Berisiko",
+        ]:
+            self.assertIn(label, central.text)
+        for control in [
+            "data-detail-search", "data-detail-risk", "data-detail-page-size",
+            'data-detail-sort="score"', "data-detail-prev", "data-detail-next",
+        ]:
+            self.assertIn(control, central.text)
+
+        self.client.get("/logout")
+        self._login("jabar2")
+        regional = self.client.get("/dashboard?month=2026-06")
+        self.assertNotIn("Total Wilayah", regional.text)
+        self.assertNotIn("Wilayah Paling Berisiko", regional.text)
+        self.assertIn("Total Skor Risiko Wilayah", regional.text)
+        self.assertIn("Lokasi Paling Berisiko", regional.text)
+
+    def test_regional_rankings_only_expose_own_location_detail(self):
+        self._login("jabar2")
+        location_ranking = self.client.get("/rankings?scope=location&month=2026-06")
+        region_ranking = self.client.get("/rankings?scope=region&month=2026-06")
+
+        self.assertIn("Ranking Lokasi Jawa Barat", location_ranking.text)
+        self.assertIn("Bandung", location_ranking.text)
+        self.assertNotIn("Semarang Uji", location_ranking.text)
+        self.assertIn("Ranking Nasional Wilayah", region_ranking.text)
+        self.assertIn("Jawa Tengah", region_ranking.text)
+        self.assertNotIn("Semarang Uji", region_ranking.text)
+
+    def test_csv_export_requires_and_enforces_one_region(self):
+        self._login("admin2")
+        denied = self.client.get("/reports/csv?month=2026-06")
+        exported = self.client.get("/reports/csv?region=Jawa%20Barat&month=2026-06")
+
+        self.assertEqual(denied.status_code, 400)
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("text/csv", exported.headers["content-type"])
+        csv_text = exported.content.decode("utf-8-sig")
+        self.assertIn("Ranking,Kode Lokasi,Nama Lokasi,Wilayah", csv_text)
+        self.assertIn("Bandung", csv_text)
+        self.assertNotIn("Semarang Uji", csv_text)
+
     def test_info_page_contains_complete_legacy_dashboard_information(self):
         self._login("admin2")
         response = self.client.get("/info")
@@ -140,8 +189,9 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertNotIn('href="/branch-inputs"', dashboard.text)
         self.assertNotIn('action="/branch-inputs/upload"', dashboard.text)
         self.assertIn("Dashboard Wilayah Jawa Barat", dashboard.text)
-        self.assertIn("Jawa Tengah", dashboard.text)
+        self.assertIn("Ringkasan Ranking Nasional Wilayah", dashboard.text)
         self.assertNotIn("JTG-1", dashboard.text)
+        self.assertIn("Bandung", dashboard.text)
         self.assertIn("JBR-1", alerts.text)
         self.assertNotIn("JTG-1", alerts.text)
         self.assertIn("Mode lihat saja", alerts.text)
@@ -182,9 +232,9 @@ class MonitoringFeatureTests(unittest.TestCase):
         self._login("admin2")
         response = self.client.get("/dashboard?region=Jawa%20Barat&month=2026-06&verification=sudah")
 
-        self.assertIn("JBR-1", response.text)
-        self.assertNotIn("JTG-1", response.text)
-        self.assertIn("Sudah Diverifikasi", response.text)
+        self.assertIn("Bandung", response.text)
+        self.assertNotIn("Semarang Uji", response.text)
+        self.assertIn('value="sudah" selected', response.text)
 
     def test_dashboard_accepts_sil_code_as_location_filter(self):
         mapped = self._add_result(
@@ -197,7 +247,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         response = self.client.get("/dashboard?location=278&month=2026-06")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("SIL-FILTER-278", response.text)
+        self.assertIn("278 · Merduati", response.text)
         self.assertEqual(mapped.branch_input.location_code, "278")
         self.assertEqual(mapped.branch_input.area, "Area Aceh")
         self.assertIn('value="Merduati" selected', response.text)
@@ -216,17 +266,19 @@ class MonitoringFeatureTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("JBR-1", response.text)
-        self.assertNotIn("JBR-W25", response.text)
+        self.assertIn("Bandung", response.text)
+        self.assertNotIn('data-search=" bogor', response.text.lower())
         for heading in [
-            "Temuan per Wilayah", "Temuan per Lokasi",
-            "Penyebab Utama berdasarkan Lokasi", "Detail Temuan Terbaru",
+            "Ringkasan Risiko Nasional", "Analisis Risiko Nasional",
+            "Indikator Risiko Tertinggi dan Terendah", "Risk Ranking", "Detail Data",
         ]:
             self.assertIn(heading, response.text)
-        self.assertEqual(response.text.count('data-chart-type="bar"'), 2)
-        self.assertIn('data-chart-action="in"', response.text)
-        self.assertIn('data-chart-action="out"', response.text)
-        self.assertIn('data-chart-action="reset"', response.text)
+        self.assertIn('id="executive-score-chart"', response.text)
+        self.assertIn('id="executive-finding-chart"', response.text)
+        self.assertIn('id="executive-trend-chart"', response.text)
+        self.assertIn('data-exec-zoom="in"', response.text)
+        self.assertIn('data-exec-zoom="out"', response.text)
+        self.assertIn('data-exec-zoom="reset"', response.text)
         self.assertNotIn("Upload Excel ke FEWS", response.text)
         self.assertIn('value="mingguan" selected', response.text)
         self.assertIn('value="2026-W24"', response.text)
@@ -274,8 +326,8 @@ class MonitoringFeatureTests(unittest.TestCase):
         self._login("admin2")
         response = self.client.get("/dashboard?area=Area%20Bandung&month=2026-06")
 
-        self.assertIn("JBR-1", response.text)
-        self.assertNotIn("JTG-1", response.text)
+        self.assertIn("Bandung", response.text)
+        self.assertNotIn('data-search=" semarang uji', response.text.lower())
 
     def test_region_user_cannot_see_or_verify_other_region(self):
         self._login("jabar2")

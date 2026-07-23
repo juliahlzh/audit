@@ -1,0 +1,89 @@
+<section class="executive-section executive-detail-section" aria-labelledby="executive-detail-heading">
+    <div class="executive-section-heading">
+        <div><h3 id="executive-detail-heading">Detail Data</h3><p>Analisis lanjutan agregat lokasi; gunakan search, filter, dan sorting bila diperlukan.</p></div>
+    </div>
+
+    {% if double_input_groups %}
+    <div class="double-input-groups">
+        <div class="double-input-heading"><div><h4>Grup Double Input</h4><p>Transaksi dengan nomor bukti, nominal, tanggal, jenis transaksi, dan lokasi yang sama.</p></div><strong>{{ double_input_groups|length }} grup</strong></div>
+        {% for group in double_input_groups %}
+        <details class="double-input-group">
+            <summary><span><strong>{{ group.proof_reference }}</strong><small>{{ group.location_code or '—' }} · {{ group.location }} · {{ group.transaction_date|date_id }}</small></span><span>Rp {{ '{:,.0f}'.format(group.amount) }} · {{ group.count }} transaksi</span></summary>
+            <div class="table-wrap"><table><thead><tr><th>ID Unix</th><th>Nomor Bukti</th><th>Nominal</th><th>Tanggal</th><th>Jenis</th><th>Lokasi</th><th>Skor</th><th>Verifikasi</th></tr></thead><tbody>{% for result in group.rows %}<tr><td>{{ result.branch_input.invoice_code }}</td><td>{{ result.branch_input.proof_reference }}</td><td>Rp {{ '{:,.0f}'.format(result.branch_input.amount_input_branch or result.branch_input.amount_should_pay or 0) }}</td><td>{{ result.branch_input.transaction_date|date_id }}</td><td>{{ result.branch_input.payment_method }}</td><td>{{ result.branch_input.branch_name }}</td><td>{{ result.risk_score }}</td><td>{{ result.verification_label }}</td></tr>{% endfor %}</tbody></table></div>
+        </details>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="executive-table-tools">
+        <label class="executive-search"><span>Search lokasi atau wilayah</span><input type="search" data-detail-search placeholder="Cari lokasi, kode, area, atau wilayah"></label>
+        <label><span>Filter risiko</span><select data-detail-risk><option value="">Semua Risiko</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option><option value="rendah">Rendah</option></select></label>
+        <label><span>Baris per halaman</span><select data-detail-page-size><option value="10">10</option><option value="20">20</option><option value="50">50</option></select></label>
+        <div class="executive-export-actions">
+            {% if user.region or filters.region %}
+            <a href="/reports/excel{% if request.url.query %}?{{ request.url.query }}{% endif %}">Export Excel</a>
+            <a href="/reports/pdf{% if request.url.query %}?{{ request.url.query }}{% endif %}">Export PDF</a>
+            <a href="/reports/csv{% if request.url.query %}?{{ request.url.query }}{% endif %}">Export CSV</a>
+            {% else %}
+            <span title="Pilih satu wilayah pada filter untuk export">Pilih wilayah untuk export</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="table-wrap executive-detail-table-wrap">
+        <table class="executive-detail-table">
+            <thead><tr><th><button type="button" data-detail-sort="name">Nama Lokasi</button></th><th><button type="button" data-detail-sort="region">Wilayah</button></th><th><button type="button" data-detail-sort="score">Total Skor</button></th><th><button type="button" data-detail-sort="total">Total Temuan</button></th><th>High</th><th>Medium</th><th>Low</th><th>Level Risiko</th><th><button type="button" data-detail-sort="rank">Ranking</button></th><th>Update Terakhir</th></tr></thead>
+            <tbody data-detail-body>
+            {% for row in dashboard_detail_rows %}
+                <tr data-detail-row data-search="{{ (row.code ~ ' ' ~ row.name ~ ' ' ~ row.area ~ ' ' ~ row.region)|lower }}" data-risk="{{ row.risk_label|lower }}" data-name="{{ row.name|lower }}" data-region="{{ row.region|lower }}" data-score="{{ row.score_total }}" data-total="{{ row.total }}" data-rank="{{ row.rank }}">
+                    <td><strong>{{ row.code or '—' }} · {{ row.name }}</strong><small>{{ row.area }}</small></td><td>{{ row.region }}</td><td><strong>{{ row.score_total }}</strong></td><td>{{ row.total }}</td><td>{{ row.high }}</td><td>{{ row.medium }}</td><td>{{ row.low }}</td><td><span class="risk-badge risk-{{ row.risk_label|lower }}">{{ row.risk_label }}</span></td><td>#{{ row.rank }}</td><td>{{ row.latest_date|date_id if row.latest_date else 'Belum ada temuan' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="executive-pagination"><span data-detail-count></span><div><button type="button" data-detail-prev>Sebelumnya</button><strong data-detail-page></strong><button type="button" data-detail-next>Berikutnya</button></div></div>
+</section>
+
+<script>
+(() => {
+    const body = document.querySelector("[data-detail-body]");
+    if (!body) return;
+    const rows = [...body.querySelectorAll("[data-detail-row]")];
+    const search = document.querySelector("[data-detail-search]");
+    const risk = document.querySelector("[data-detail-risk]");
+    const pageSize = document.querySelector("[data-detail-page-size]");
+    const count = document.querySelector("[data-detail-count]");
+    const pageLabel = document.querySelector("[data-detail-page]");
+    const previous = document.querySelector("[data-detail-prev]");
+    const next = document.querySelector("[data-detail-next]");
+    let page = 1, sortKey = "rank", direction = 1;
+    const render = () => {
+        const query = search.value.trim().toLowerCase();
+        const filtered = rows.filter(row => (!query || row.dataset.search.includes(query)) && (!risk.value || row.dataset.risk === risk.value));
+        filtered.sort((a,b) => {
+            const numeric = ["score","total","rank"].includes(sortKey);
+            const left = numeric ? Number(a.dataset[sortKey]) : a.dataset[sortKey];
+            const right = numeric ? Number(b.dataset[sortKey]) : b.dataset[sortKey];
+            return (left < right ? -1 : left > right ? 1 : 0) * direction;
+        });
+        rows.forEach(row => { row.hidden = true; });
+        const size = Number(pageSize.value);
+        const pages = Math.max(1, Math.ceil(filtered.length / size));
+        page = Math.min(page, pages);
+        filtered.slice((page - 1) * size, page * size).forEach(row => { row.hidden = false; body.appendChild(row); });
+        count.textContent = `${filtered.length} lokasi ditemukan`;
+        pageLabel.textContent = `${page} / ${pages}`;
+        previous.disabled = page <= 1;
+        next.disabled = page >= pages;
+    };
+    [search,risk,pageSize].forEach(control => control.addEventListener(control === search ? "input" : "change", () => { page = 1; render(); }));
+    document.querySelectorAll("[data-detail-sort]").forEach(button => button.addEventListener("click", () => {
+        const key = button.dataset.detailSort;
+        direction = sortKey === key ? direction * -1 : 1;
+        sortKey = key; page = 1; render();
+    }));
+    previous.addEventListener("click", () => { page -= 1; render(); });
+    next.addEventListener("click", () => { page += 1; render(); });
+    render();
+})();
+</script>

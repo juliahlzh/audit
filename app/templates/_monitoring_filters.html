@@ -1,4 +1,5 @@
 <form class="monitor-filter" method="get" action="{{ filter_action }}" data-period-filter>
+    {% if filter_action == '/rankings' %}<input type="hidden" name="scope" value="{{ scope }}">{% endif %}
     <div class="filter-field">
         <label for="region">Wilayah</label>
         <select id="region" name="region" {% if user.region %}disabled{% endif %}>

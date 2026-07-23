@@ -1,0 +1,22 @@
+<section class="executive-section" aria-labelledby="risk-ranking-heading">
+    <div class="executive-section-heading">
+        <div><h3 id="risk-ranking-heading">Risk Ranking</h3><p>Rank #1 menunjukkan prioritas investigasi tertinggi.</p></div>
+        <div class="executive-ranking-links"><a href="/rankings?scope=location{% if request.url.query %}&{{ request.url.query }}{% endif %}">Ranking Lokasi</a><a href="/rankings?scope=region{% if request.url.query %}&{{ request.url.query }}{% endif %}">Ranking Wilayah</a></div>
+    </div>
+    <div class="executive-ranking-grid {% if user.region %}regional{% endif %}">
+        <article class="executive-ranking-panel urgent"><div class="executive-ranking-heading"><h4>Top 10 Lokasi Paling Berisiko{% if user.region %} di Wilayah{% endif %}</h4><span>Skor tertinggi</span></div>{% for row in executive_top_location_rows %}<a class="executive-ranking-row" href="/rankings?scope=location"><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span><span><strong>{{ row.name }}</strong><small>{{ row.region }} · {{ row.total }} temuan</small></span><b>{{ row.score_total }}</b></a>{% endfor %}</article>
+        {% if not user.region %}
+        <article class="executive-ranking-panel urgent"><div class="executive-ranking-heading"><h4>Top 10 Wilayah Paling Berisiko</h4><span>Skor tertinggi</span></div>{% for row in top_region_rows %}<a class="executive-ranking-row" href="/rankings?scope=region"><span class="rank-number rank-{{ row.rank }}">{{ row.rank }}</span><span><strong>{{ row.name }}</strong><small>{{ row.total }} temuan</small></span><b>{{ row.score_total }}</b></a>{% endfor %}</article>
+        {% endif %}
+        <article class="executive-ranking-panel safe"><div class="executive-ranking-heading"><h4>Top 10 Lokasi Paling Aman{% if user.region %} di Wilayah{% endif %}</h4><span>Skor terendah</span></div>{% for row in executive_bottom_location_rows %}<a class="executive-ranking-row" href="/rankings?scope=location"><span class="rank-number">{{ row.rank }}</span><span><strong>{{ row.name }}</strong><small>{{ row.region }} · {{ row.total }} temuan</small></span><b>{{ row.score_total }}</b></a>{% endfor %}</article>
+        {% if not user.region %}
+        <article class="executive-ranking-panel safe"><div class="executive-ranking-heading"><h4>Top 10 Wilayah Paling Aman</h4><span>Skor terendah</span></div>{% for row in bottom_region_rows %}<a class="executive-ranking-row" href="/rankings?scope=region"><span class="rank-number">{{ row.rank }}</span><span><strong>{{ row.name }}</strong><small>{{ row.total }} temuan</small></span><b>{{ row.score_total }}</b></a>{% endfor %}</article>
+        {% elif national_region_summary %}
+        <article class="executive-ranking-panel national-summary">
+            <div class="executive-ranking-heading"><h4>Ringkasan Ranking Nasional Wilayah</h4><span>{{ user.region }}</span></div>
+            <div class="national-rank-number"><span>Ranking Nasional</span><strong>#{{ national_region_summary.rank }}</strong></div>
+            <dl><div><dt>Total Skor</dt><dd>{{ national_region_summary.score_total }}</dd></div><div><dt>Total Temuan</dt><dd>{{ national_region_summary.total }}</dd></div><div><dt>Selisih dengan ranking di atas</dt><dd>{{ national_region_summary.gap_above if national_region_summary.gap_above is not none else '—' }}</dd></div><div><dt>Selisih dengan ranking di bawah</dt><dd>{{ national_region_summary.gap_below if national_region_summary.gap_below is not none else '—' }}</dd></div><div><dt>Perubahan Ranking</dt><dd>{% if national_region_summary.rank_delta is none %}—{% elif national_region_summary.rank_delta > 0 %}Naik {{ national_region_summary.rank_delta }}{% elif national_region_summary.rank_delta < 0 %}Turun {{ national_region_summary.rank_delta|abs }}{% else %}Tetap{% endif %}</dd></div></dl>
+        </article>
+        {% endif %}
+    </div>
+</section>

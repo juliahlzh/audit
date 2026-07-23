@@ -60,10 +60,21 @@ Alert Center menyediakan filter wilayah/area serta filter risiko dan tindak lanj
 
 Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas input maksimal H+2 hari kerja dari tanggal bank dan warning merah setelah lebih dari H+10. Layout memuat:
 
-- indikator `Double Input Bukti Transfer`: dua atau lebih data aktif dengan fingerprint transaksi yang sama (tanggal/waktu input, tanggal bank/setor, waktu pembayaran, lokasi, customer, nominal, metode pembayaran, dan rekening tujuan) serta `proof_reference` bukti transfer yang sama; ID Unix boleh berbeda;
-- Dashboard ringkas dengan urutan grafik batang temuan per wilayah, grafik batang temuan per lokasi, kartu indikator utama, daftar penyebab per lokasi, lalu detail temuan ringkas di bagian paling bawah;
+- indikator `Double Input Bukti Transfer`: dua atau lebih data aktif dengan nomor bukti, nominal setor, tanggal transaksi, jenis transaksi, dan lokasi yang sama; perbedaan ID Unix, waktu input, customer, atau petugas tidak membatalkan deteksi;
+- seluruh transaksi yang masuk ke fingerprint Double Input yang sama ditampilkan sebagai satu grup agar dapat diverifikasi auditor;
+- Dashboard memakai struktur Executive Dashboard yang dapat dipahami dalam waktu kurang dari 30 detik: KPI Cards → Grafik Analisis → Indikator Risiko Tertinggi dan Terendah → Risk Ranking → Detail Data;
+- Dashboard tidak menampilkan tabel detail pada bagian atas halaman;
+- KPI Admin Pusat mencakup total wilayah, lokasi, temuan, high/medium/low risk, total dan rata-rata skor nasional, wilayah paling berisiko, dan lokasi paling berisiko;
+- KPI Admin Wilayah mencakup total lokasi, temuan, high/medium/low risk, total dan rata-rata skor wilayah, serta lokasi paling berisiko di wilayah;
+- grafik Admin Pusat menampilkan distribusi risiko, total skor, dan jumlah temuan per wilayah, tren risiko nasional, serta komposisi high/medium/low;
+- grafik Admin Wilayah memakai data lokasi di wilayahnya untuk distribusi, total skor, dan jumlah temuan, ditambah tren serta komposisi risiko wilayah;
 - grafik wilayah/lokasi berupa horizontal bar chart berbasis jumlah temuan, bukan skor, dan selalu merender seluruh kategori hasil filter tanpa batas top-10;
 - grafik batang mendukung tooltip jumlah temuan dan total skor, scroll internal horizontal/vertikal, serta kontrol zoom in, zoom out, dan reset;
+- panel Lokasi Paling Berisiko dan Lokasi Paling Aman memuat skor, jumlah temuan, level risiko, serta seluruh indikator penyebab yang diurutkan berdasarkan frekuensi;
+- seluruh daftar peringkat menggunakan istilah Risk Ranking; rank #1 selalu berarti prioritas investigasi tertinggi;
+- Admin Pusat melihat top/bottom 10 lokasi dan wilayah serta halaman Ranking Nasional Lokasi dan Wilayah;
+- Admin Wilayah melihat top/bottom 10 lokasi miliknya dan ringkasan peringkat nasional wilayah tanpa detail lokasi atau temuan wilayah lain;
+- tabel detail agregat lokasi berada paling bawah dan menyediakan search, filter risiko, sorting, pagination, serta export Excel/PDF/CSV yang tetap mengikuti pembatasan satu wilayah;
 - tabel ID Unix, kesalahan, jumlah kesalahan, dan skor;
 - grafik batang per indikator dan per lokasi;
 - grafik garis perbandingan enam periode bulanan atau mingguan beserta analisis perubahan periode terakhir;
@@ -92,9 +103,15 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Admin Pusat melihat Dashboard/Info/Laporan/Alert Center/Upload Data; Admin Wilayah hanya melihat Dashboard/Laporan/Alert Center.
 - Form upload hanya tersedia bagi Admin Pusat; tidak ada form input manual untuk akun mana pun.
 - Dashboard tidak menampilkan form upload; menu `Upload Data` tetap tersedia khusus Admin Pusat.
-- Dashboard menampilkan grafik wilayah dan lokasi sebelum KPI, ringkasan indikator penyebab per lokasi, dan detail ringkas di posisi terakhir.
+- Dashboard menampilkan KPI sebelum grafik, ringkasan indikator risiko setelah grafik, dan tabel hanya pada bagian paling bawah.
+- Seluruh KPI, grafik, panel risiko, ranking, dan detail berubah mengikuti filter aktif.
+- Admin Pusat mendapat seluruh KPI dan analitik nasional; Admin Wilayah hanya mendapat analitik detail wilayahnya dengan ringkasan ranking wilayah nasional yang aman.
+- Risk Ranking #1 selalu merupakan lokasi/wilayah dengan total skor tertinggi; daftar teraman diurutkan dari skor terendah.
+- Halaman Ranking Nasional Lokasi dan Wilayah tersedia tanpa membuka detail lintas wilayah bagi akun regional.
+- Tabel detail lokasi menyediakan search, filter risiko, sorting, pagination, dan export wilayah Excel/PDF/CSV.
 - Grafik dashboard dapat di-zoom, di-reset, dan di-scroll tanpa menimbulkan overflow halaman pada desktop maupun mobile.
-- Double Input terdeteksi saat fingerprint transaksi dan referensi bukti transfer sama, termasuk jika ID Unix berbeda.
+- Double Input terdeteksi saat nomor bukti, nominal, tanggal transaksi, jenis transaksi, dan lokasi sama, termasuk jika ID Unix atau metadata lainnya berbeda.
+- Transaksi Double Input ditampilkan berkelompok berdasarkan fingerprint duplikat.
 - Upload `.xlsx`/`.csv` memvalidasi tipe file, ukuran, ukuran ekstraksi workbook, jumlah baris, duplikasi `idunix`, dan kode lokasi sebelum mutasi data.
 - Upload hari berikutnya mempertahankan histori hari sebelumnya; koreksi dengan `idunix` sama tidak menghasilkan dua versi aktif.
 - Matching upload hanya memproses batch baru/koreksi dan tidak menghapus status tindak lanjut data historis.
