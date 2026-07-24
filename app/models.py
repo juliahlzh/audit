@@ -178,6 +178,7 @@ class MatchingResult(Base):
     triggered_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_up_status: Mapped[str] = mapped_column(String(30), default="OPEN", index=True)
     follow_up_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    follow_up_source: Mapped[str] = mapped_column(String(20), default="AUTO", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -17,8 +17,13 @@ def _as_bool(value: str) -> bool:
 
 def load_sample_file(db: Session, csv_path: Path) -> dict:
     existing_follow_up = {
-        row.branch_input_id: (row.follow_up_status, row.follow_up_notes)
-        for row in db.query(MatchingResult).filter(MatchingResult.branch_input_id.isnot(None)).all()
+        row.branch_input_id: (row.follow_up_status, row.follow_up_notes, row.follow_up_source)
+        for row in db.query(MatchingResult)
+        .filter(
+            MatchingResult.branch_input_id.isnot(None),
+            MatchingResult.follow_up_source == "MANUAL",
+        )
+        .all()
     }
     inserted = 0
     sample_verification: dict[str, bool] = {}
@@ -58,10 +63,11 @@ def load_sample_file(db: Session, csv_path: Path) -> dict:
         results = run_matching(db)
         for result in results:
             if result.branch_input_id in existing_follow_up:
-                result.follow_up_status, result.follow_up_notes = existing_follow_up[result.branch_input_id]
+                result.follow_up_status, result.follow_up_notes, result.follow_up_source = existing_follow_up[result.branch_input_id]
             invoice = result.branch_input.invoice_code if result.branch_input else ""
             if invoice in sample_verification and sample_verification[invoice]:
                 result.follow_up_status = "RESOLVED"
                 result.follow_up_notes = "Status verifikasi bawaan dataset sintetis."
+                result.follow_up_source = "AUTO"
         db.commit()
     return {"inserted": inserted, "source": csv_path.name}

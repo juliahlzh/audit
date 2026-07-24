@@ -1,4 +1,4 @@
-# FEWS Monitoring PRD — Pembaruan 23 Juli 2026
+# FEWS Monitoring PRD — Pembaruan 24 Juli 2026
 
 ## Tujuan
 
@@ -16,6 +16,7 @@ Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lo
 - Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
 - Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini hanya tersedia untuk Admin Pusat dan tidak mengembalikan input manual yang sudah dinonaktifkan.
 - Hanya admin/auditor yang dapat mengubah status verifikasi atau tindak lanjut.
+- Tindak lanjut baru ditentukan otomatis dari skor: `INVESTIGATION` untuk skor > 7, `CLARIFICATION` untuk skor 4–7, `OPEN` untuk skor 1–3, dan `RESOLVED` untuk skor 0. Admin Pusat dapat mengoreksi status maupun catatan; koreksi ditandai sebagai manual dan dipertahankan saat matching dijalankan ulang.
 - Menu **Info** mempertahankan seluruh informasi monitoring dashboard lama dalam halaman terpisah.
 - Manual input tetap tidak tersedia. Upload Excel hanya tampil dan dapat dipakai oleh Admin Pusat.
 - Dashboard tidak memuat form upload. Admin Pusat mengunggah data hanya melalui menu `Upload Data`, sehingga Dashboard dan Laporan mempunyai fungsi yang jelas dan berbeda.
@@ -74,7 +75,9 @@ Aturan indikator tetap mengikuti `app/services/rule_config.py`, termasuk batas i
 - Dashboard Pusat memakai satu grafik batang vertikal **Skor Risiko 15 Wilayah** sebagai sorotan utama tepat setelah filter. Grafik selalu mempertahankan seluruh 15 wilayah, mengikuti filter periode/indikator/verifikasi, dan menandai wilayah yang sedang dipilih tanpa menyembunyikan wilayah lain;
 - setelah grafik nasional, Dashboard hanya memuat ringkasan KPI, perkembangan periode, jumlah per indikator, serta **Ranking Lokasi Nasional** yang terdiri dari 10 lokasi berisiko tertinggi dan 10 lokasi berisiko terendah;
 - setiap baris ranking lokasi menampilkan alasan skor berupa indikator penyebab dan frekuensinya. Skor nol dijelaskan sebagai tidak adanya indikator risiko pada filter aktif;
-- tabel ID Unix, grup Double Input, search/sort/pagination detail lokasi, verifikasi, dan detail transaksi tidak ditampilkan pada Dashboard; seluruh pemeriksaan mendalam tersebut tersedia pada menu Laporan;
+- tabel ID Unix, grup Double Input, search/sort/pagination detail lokasi, dan detail transaksi tidak ditampilkan pada Dashboard; seluruh pemeriksaan mendalam tersebut tersedia pada menu Laporan;
+- Laporan memakai grafik visual yang sama dengan Dashboard, dimulai dari perbandingan 15 wilayah, lalu dilengkapi grafik indikator, perkembangan indikator, komposisi indikator per lokasi/wilayah, distribusi risiko, total skor, jumlah temuan, tren, dan daftar indikator SOP;
+- tabel detail Laporan menampilkan ID Unix, tanggal, wilayah, area, kode lokasi, lokasi, kesalahan, jumlah kesalahan, skor, dan tipe data tanpa kolom Status Verifikasi maupun Aksi;
 - grafik wilayah/lokasi berupa horizontal bar chart berbasis jumlah temuan, bukan skor, dan selalu merender seluruh kategori hasil filter tanpa batas top-10;
 - grafik batang mendukung tooltip jumlah temuan dan total skor, scroll internal horizontal/vertikal, serta kontrol zoom in, zoom out, dan reset;
 - panel Lokasi Paling Berisiko dan Lokasi Paling Aman memuat skor, jumlah temuan, level risiko, serta seluruh indikator penyebab yang diurutkan berdasarkan frekuensi;
@@ -107,6 +110,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Akun wilayah hanya melihat detail wilayahnya pada Dashboard, Laporan, ekspor, dan Alert Center.
 - Ranking nasional tetap terlihat pada Dashboard akun wilayah.
 - Akun wilayah tidak dapat memverifikasi atau mengubah tindak lanjut.
+- Tindak lanjut otomatis mengikuti tingkatan skor dan koreksi manual Admin Pusat tidak ditimpa oleh proses matching berikutnya.
 - Admin Pusat melihat Dashboard/Info/Laporan/Alert Center/Upload Data; Admin Wilayah hanya melihat Dashboard/Laporan/Alert Center.
 - Form upload hanya tersedia bagi Admin Pusat; tidak ada form input manual untuk akun mana pun.
 - Dashboard tidak menampilkan form upload; menu `Upload Data` tetap tersedia khusus Admin Pusat.
@@ -114,6 +118,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Seluruh KPI, grafik, panel risiko, ranking, dan detail berubah mengikuti filter aktif.
 - Grafik indikator vertikal memuat semua indikator SOP dan tren jumlah indikator berubah konsisten antara agregasi bulanan dan mingguan.
 - Grafik utama Dashboard Pusat menampilkan tepat 15 wilayah sekaligus; Ranking Lokasi Nasional menampilkan tepat 10 risiko tertinggi dan 10 risiko terendah beserta alasan skor; Dashboard tidak memuat tabel detail transaksi.
+- Laporan menampilkan grafik 15 wilayah dan rangkaian grafik analisis yang konsisten dengan Dashboard dalam versi lebih lengkap; tabel detail tidak memuat kolom Status Verifikasi atau Aksi.
 - Admin Pusat mendapat seluruh KPI dan analitik nasional; Admin Wilayah hanya mendapat analitik detail wilayahnya dengan ringkasan ranking wilayah nasional yang aman.
 - Risk Ranking #1 selalu merupakan lokasi/wilayah dengan total skor tertinggi; daftar teraman diurutkan dari skor terendah.
 - Halaman Ranking Nasional Lokasi dan Wilayah tersedia tanpa membuka detail lintas wilayah bagi akun regional.
@@ -127,7 +132,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Response memakai header keamanan dasar dan session cookie production memakai `Secure`, `SameSite=Lax`, serta secret dari environment.
 - Filter area memengaruhi data secara nyata.
 - Filter mingguan dan bulanan memengaruhi data secara nyata dan konsisten pada Dashboard, Laporan, PDF, dan Excel.
-- Grafik batang wilayah/lokasi, grafik garis tren periode, grafik indikator, top/bottom 10, tabel detail, status verifikasi, dataset sintetis, dan ekspor tetap berfungsi.
+- Grafik batang wilayah/lokasi, grafik garis tren periode, grafik indikator, top/bottom 10, tabel detail, tindak lanjut otomatis, dataset sintetis, dan ekspor tetap berfungsi.
 - Informasi yang tampil pada Dashboard dan Laporan mempunyai padanan data pada PDF dan Excel untuk filter wilayah yang sama.
 - Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
 

@@ -184,21 +184,24 @@
             <section class="follow-up-box">
                 <span class="section-label">Tindak Lanjut</span>
                 <strong class="follow-up-state">{{ row.follow_up_status or 'OPEN' }}</strong>
+                <small class="muted">{{ 'Dikoreksi manual' if row.follow_up_source == 'MANUAL' else 'Otomatis FEWS berdasarkan skor risiko' }}</small>
+                {% if row.follow_up_notes %}<p class="follow-up-note">{{ row.follow_up_notes }}</p>{% endif %}
                 {% if user.role in ['admin', 'auditor'] %}<details class="inline-disclosure follow-up-disclosure">
                     <summary class="disclosure-summary compact">
-                        <span><strong>Ubah status</strong></span>
+                        <span><strong>Koreksi tindak lanjut</strong></span>
                         <span class="toggle-label"></span>
                     </summary>
                     <form method="post" action="/alerts/{{ row.id }}/follow-up">
                         <select name="follow_up_status" required>
-                            <option value="CLARIFICATION">CLARIFICATION</option>
-                            <option value="HOLD">HOLD</option>
-                            <option value="RETURN">RETURN</option>
-                            <option value="INVESTIGATION">INVESTIGATION</option>
-                            <option value="RESOLVED">RESOLVED</option>
+                            <option value="OPEN" {% if row.follow_up_status == 'OPEN' %}selected{% endif %}>OPEN</option>
+                            <option value="CLARIFICATION" {% if row.follow_up_status == 'CLARIFICATION' %}selected{% endif %}>CLARIFICATION</option>
+                            <option value="HOLD" {% if row.follow_up_status == 'HOLD' %}selected{% endif %}>HOLD</option>
+                            <option value="RETURN" {% if row.follow_up_status == 'RETURN' %}selected{% endif %}>RETURN</option>
+                            <option value="INVESTIGATION" {% if row.follow_up_status == 'INVESTIGATION' %}selected{% endif %}>INVESTIGATION</option>
+                            <option value="RESOLVED" {% if row.follow_up_status == 'RESOLVED' %}selected{% endif %}>RESOLVED</option>
                         </select>
-                        <input type="text" name="follow_up_notes" placeholder="Catatan klarifikasi / alasan hold-return" required>
-                        <button type="submit">Simpan</button>
+                        <input type="text" name="follow_up_notes" value="{{ row.follow_up_notes or '' }}" placeholder="Alasan koreksi atau catatan tindak lanjut" required>
+                        <button type="submit">Simpan Koreksi</button>
                     </form>
                 </details>
                 {% else %}<span class="muted">Mode lihat saja</span>{% endif %}

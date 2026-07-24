@@ -40,6 +40,19 @@ def _status_from_score(score: int) -> str:
     return "MATCHED"
 
 
+def automatic_follow_up(score: int) -> tuple[str, str]:
+    """Return the default follow-up while keeping manual corrections separate."""
+    medium_max = RULE_CONFIG["risk_level"]["medium_max"]
+    low_max = RULE_CONFIG["risk_level"]["low_max"]
+    if score > medium_max:
+        return "INVESTIGATION", "Otomatis FEWS: risiko tinggi; prioritaskan investigasi."
+    if score > low_max:
+        return "CLARIFICATION", "Otomatis FEWS: risiko sedang; minta klarifikasi dan bukti pendukung."
+    if score > 0:
+        return "OPEN", "Otomatis FEWS: risiko rendah; pantau dan tindak lanjuti indikator yang muncul."
+    return "RESOLVED", "Otomatis FEWS: tidak ada indikator risiko pada data aktif."
+
+
 def _indicator_level(score: int) -> str:
     if score >= 5:
         return "Tinggi"
@@ -183,12 +196,21 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
         branch_inputs.sort(key=lambda item: (item.transaction_date, item.id or 0))
 
     active_ids = [item.id for item in branch_inputs if item.id is not None]
-    existing_results: dict[int, tuple[str, str | None]] = {}
+    existing_results: dict[int, tuple[str, str | None, str]] = {}
     for offset in range(0, len(active_ids), 900):
         id_chunk = active_ids[offset : offset + 900]
         for result in db.query(MatchingResult).filter(MatchingResult.branch_input_id.in_(id_chunk)).all():
             if result.branch_input_id is not None:
-                existing_results[result.branch_input_id] = (result.follow_up_status, result.follow_up_notes)
+                source = result.follow_up_source or (
+                    "MANUAL"
+                    if result.follow_up_notes and not result.follow_up_notes.startswith("Otomatis FEWS:")
+                    else "AUTO"
+                )
+                existing_results[result.branch_input_id] = (
+                    result.follow_up_status,
+                    result.follow_up_notes,
+                    source,
+                )
         db.query(MatchingResult).filter(MatchingResult.branch_input_id.in_(id_chunk)).delete(synchronize_session=False)
     db.flush()
 
@@ -311,6 +333,8 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
         mismatch = [str(r["reason"]) for r in triggered]
 
         previous_follow_up = existing_results.get(item.id)
+        automatic_status, automatic_notes = automatic_follow_up(score)
+        preserve_manual = bool(previous_follow_up and previous_follow_up[2] == "MANUAL")
         result = MatchingResult(
             branch_input_id=item.id,
             bank_mutation_id=None,
@@ -324,8 +348,9 @@ def run_matching(db: Session, branch_ids: list[int] | None = None) -> list[Match
             confidence=max(0.0, 100.0 - (score * 8.0)),
             match_reason="; ".join(mismatch) if mismatch else "Lolos seluruh pengujian FEWS.",
             triggered_rules=json.dumps(triggered, ensure_ascii=False),
-            follow_up_status=previous_follow_up[0] if previous_follow_up else ("OPEN" if score > 0 else "RESOLVED"),
-            follow_up_notes=previous_follow_up[1] if previous_follow_up else None,
+            follow_up_status=previous_follow_up[0] if preserve_manual else automatic_status,
+            follow_up_notes=previous_follow_up[1] if preserve_manual else automatic_notes,
+            follow_up_source="MANUAL" if preserve_manual else "AUTO",
         )
         db.add(result)
         results.append(result)

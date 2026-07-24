@@ -28,6 +28,7 @@ from app.services.organization import (
     locations_for_scope,
     resolve_location,
 )
+from app.services.matching_engine import automatic_follow_up
 from app.services.reports import build_ranked_excel_report
 from app.services.rule_config import RULE_CONFIG
 from app.services.sample_loader import load_sample_file
@@ -591,6 +592,31 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertIn('formaction="/reports/pdf"', response.text)
         self.assertIn("Tabel Detail FEWS", response.text)
         self.assertIn("10 Risiko Tertinggi", response.text)
+        self.assertIn("Skor Risiko Seluruh 15 Wilayah", response.text)
+        self.assertIn("Komposisi Indikator per Lokasi", response.text)
+        self.assertIn("Macam-macam Indikator SOP", response.text)
+        self.assertIn("Distribusi Risiko per Lokasi", response.text)
+        self.assertNotIn("<th>Status Verifikasi</th>", response.text)
+        self.assertNotIn("<th>Aksi</th>", response.text)
+        self.assertNotIn(f'action="/reports/{self.jbr_result.id}/verify"', response.text)
+
+    def test_admin_can_correct_automatic_follow_up(self):
+        self._login("admin2")
+        alert_page = self.client.get("/alerts")
+        self.assertIn("Otomatis FEWS berdasarkan skor risiko", alert_page.text)
+        self.assertIn("Koreksi tindak lanjut", alert_page.text)
+
+        response = self.client.post(
+            f"/alerts/{self.jbr_result.id}/follow-up",
+            data={"follow_up_status": "OPEN", "follow_up_notes": "Koreksi hasil pemeriksaan pusat"},
+            follow_redirects=False,
+        )
+        self.db.refresh(self.jbr_result)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(self.jbr_result.follow_up_status, "OPEN")
+        self.assertEqual(self.jbr_result.follow_up_notes, "Koreksi hasil pemeriksaan pusat")
+        self.assertEqual(self.jbr_result.follow_up_source, "MANUAL")
 
     def test_real_pdf_export_contains_complete_report(self):
         self._login("admin2")
@@ -610,6 +636,7 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(self.jtg_result.follow_up_status, "RESOLVED")
         self.assertEqual(self.jtg_result.follow_up_notes, "Bukti sudah diperiksa")
+        self.assertEqual(self.jtg_result.follow_up_source, "MANUAL")
 
     def test_sample_loader_is_idempotent_and_labels_synthetic_data(self):
         path = Path(__file__).resolve().parents[1] / "sample_data" / "fews_uji.csv"
@@ -624,6 +651,40 @@ class MonitoringFeatureTests(unittest.TestCase):
         self.assertTrue(all("SINTETIS" in row.customer_name for row in loaded))
         self.assertTrue(all(row.location_code for row in loaded))
         self.assertTrue(all(row.area != "Belum Dipetakan" for row in loaded))
+
+    def test_sample_loader_recalculates_auto_follow_up_and_preserves_manual_corrections(self):
+        root = Path(__file__).resolve().parents[1]
+        first = load_sample_file(self.db, root / "sample_data" / "fews_uji.csv")
+        self.assertGreater(first["inserted"], 0)
+        results = (
+            self.db.query(MatchingResult)
+            .join(BranchInput, MatchingResult.branch_input_id == BranchInput.id)
+            .filter(BranchInput.invoice_code.like("UJI-%"))
+            .order_by(MatchingResult.id)
+            .limit(2)
+            .all()
+        )
+        automatic, manual = results
+        automatic.follow_up_status = "RESOLVED"
+        automatic.follow_up_notes = "Status otomatis lama."
+        automatic.follow_up_source = "AUTO"
+        manual.follow_up_status = "HOLD"
+        manual.follow_up_notes = "Koreksi auditor."
+        manual.follow_up_source = "MANUAL"
+        self.db.commit()
+        automatic_branch_id, manual_branch_id = automatic.branch_input_id, manual.branch_input_id
+
+        loaded = load_sample_file(self.db, root / "sample_data" / "fews_realistis.csv")
+        self.assertGreater(loaded["inserted"], 0)
+        automatic = self.db.query(MatchingResult).filter_by(branch_input_id=automatic_branch_id).one()
+        manual = self.db.query(MatchingResult).filter_by(branch_input_id=manual_branch_id).one()
+        expected_status, expected_notes = automatic_follow_up(automatic.risk_score)
+        self.assertEqual(automatic.follow_up_status, expected_status)
+        self.assertEqual(automatic.follow_up_notes, expected_notes)
+        self.assertEqual(automatic.follow_up_source, "AUTO")
+        self.assertEqual(manual.follow_up_status, "HOLD")
+        self.assertEqual(manual.follow_up_notes, "Koreksi auditor.")
+        self.assertEqual(manual.follow_up_source, "MANUAL")
 
 
 if __name__ == "__main__":

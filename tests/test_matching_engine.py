@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import BranchInput
-from app.services.matching_engine import run_matching
+from app.services.matching_engine import automatic_follow_up, run_matching
 
 
 class MatchingEngineTests(unittest.TestCase):
@@ -52,6 +52,14 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertEqual(results[0].risk_score, 1)
         self.assertEqual(results[0].status, "NEED REVIEW")
         self.assertEqual(results[0].follow_up_status, "OPEN")
+        self.assertEqual(results[0].follow_up_source, "AUTO")
+        self.assertTrue(results[0].follow_up_notes.startswith("Otomatis FEWS:"))
+
+    def test_automatic_follow_up_uses_risk_score_tiers(self):
+        self.assertEqual(automatic_follow_up(0)[0], "RESOLVED")
+        self.assertEqual(automatic_follow_up(1)[0], "OPEN")
+        self.assertEqual(automatic_follow_up(4)[0], "CLARIFICATION")
+        self.assertEqual(automatic_follow_up(8)[0], "INVESTIGATION")
 
     def test_amount_mismatch_flag(self):
         db = self.Session()

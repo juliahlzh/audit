@@ -46,7 +46,7 @@ from .services.analytics import (
     filtered_results,
     previous_period_filters,
 )
-from .services.matching_engine import run_matching
+from .services.matching_engine import automatic_follow_up, run_matching
 from .services.organization import LOCATION_ALIASES, ORGANIZATION_CODE_ROWS, REGIONS, resolve_location
 from .services.rule_config import RULE_CONFIG
 from .services.reports import build_excel_report, build_pdf_report, build_ranked_excel_report, summarize_by_location
@@ -216,7 +216,33 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("matching_results", "triggered_rules", "TEXT")
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
+    _add_column_if_missing("matching_results", "follow_up_source", "VARCHAR(20) DEFAULT 'AUTO'")
     with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE matching_results SET follow_up_source = 'MANUAL' "
+                "WHERE follow_up_notes IS NOT NULL "
+                "AND follow_up_notes NOT LIKE 'Otomatis FEWS:%' "
+                "AND (follow_up_source IS NULL OR follow_up_source = 'AUTO')"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE matching_results SET "
+                "follow_up_status = CASE "
+                "WHEN risk_score > 7 THEN 'INVESTIGATION' "
+                "WHEN risk_score > 3 THEN 'CLARIFICATION' "
+                "WHEN risk_score > 0 THEN 'OPEN' "
+                "ELSE 'RESOLVED' END, "
+                "follow_up_notes = CASE "
+                "WHEN risk_score > 7 THEN 'Otomatis FEWS: risiko tinggi; prioritaskan investigasi.' "
+                "WHEN risk_score > 3 THEN 'Otomatis FEWS: risiko sedang; minta klarifikasi dan bukti pendukung.' "
+                "WHEN risk_score > 0 THEN 'Otomatis FEWS: risiko rendah; pantau dan tindak lanjuti indikator yang muncul.' "
+                "ELSE 'Otomatis FEWS: tidak ada indikator risiko pada data aktif.' END, "
+                "follow_up_source = 'AUTO' "
+                "WHERE follow_up_source IS NULL OR follow_up_source = 'AUTO'"
+            )
+        )
         for code, region, area, location in ORGANIZATION_CODE_ROWS:
             conn.execute(
                 text(
@@ -594,7 +620,41 @@ def _attach_rule_details(rows: list[MatchingResult]) -> list[MatchingResult]:
             row.rule_details = json.loads(row.triggered_rules or "[]")
         except json.JSONDecodeError:
             row.rule_details = []
+        row.automatic_follow_up_status, row.automatic_follow_up_notes = automatic_follow_up(
+            row.risk_score or 0
+        )
+        row.follow_up_source = row.follow_up_source or (
+            "MANUAL"
+            if row.follow_up_notes and not row.follow_up_notes.startswith("Otomatis FEWS:")
+            else "AUTO"
+        )
     return rows
+
+
+def _national_region_spotlight_context(
+    db: Session,
+    user: User,
+    filters: dict,
+) -> tuple[list[dict], dict | None, list[dict]]:
+    global_region_rows = complete_region_rankings(build_global_region_ranking(db, user, filters))
+    master_region_rows = [row for row in global_region_rows if row["name"] in REGIONS]
+    chart_rows = [
+        {
+            "name": row["name"],
+            "rank": row["rank"],
+            "score_total": row["score_total"],
+            "total": row["total"],
+            "high": row["high"],
+            "indicator_summary": row["indicator_summary"],
+        }
+        for row in master_region_rows
+    ]
+    selected_region = user.region or filters.get("region", "")
+    focus = next(
+        (row for row in chart_rows if row["name"] == selected_region),
+        chart_rows[0] if chart_rows else None,
+    )
+    return chart_rows, focus, global_region_rows
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -653,27 +713,12 @@ def dashboard(
         "verification": verification,
     }
     data = build_monitoring_context(db, user, filters)
-    global_region_rows = complete_region_rankings(build_global_region_ranking(db, user, filters))
+    (
+        data["national_region_chart_rows"],
+        data["national_region_focus"],
+        global_region_rows,
+    ) = _national_region_spotlight_context(db, user, filters)
     data["global_region_rows"] = global_region_rows
-    master_region_rows = [
-        row for row in global_region_rows if row["name"] in REGIONS
-    ]
-    data["national_region_chart_rows"] = [
-        {
-            "name": row["name"],
-            "rank": row["rank"],
-            "score_total": row["score_total"],
-            "total": row["total"],
-            "high": row["high"],
-            "indicator_summary": row["indicator_summary"],
-        }
-        for row in master_region_rows
-    ]
-    selected_region = user.region or filters.get("region", "")
-    data["national_region_focus"] = next(
-        (row for row in data["national_region_chart_rows"] if row["name"] == selected_region),
-        data["national_region_chart_rows"][0] if data["national_region_chart_rows"] else None,
-    )
     dashboard_location_rows = (
         data["executive_location_rows"]
         if user.region
@@ -1213,14 +1258,9 @@ def update_alert_follow_up(
     if not row:
         return RedirectResponse("/alerts", status_code=303)
 
-    current = row.follow_up_status or "OPEN"
     target = follow_up_status.strip().upper()
     if target not in WORKFLOW_TRANSITIONS:
         add_log(db, "Follow-up invalid", f"Status {target} tidak dikenal untuk hasil #{result_id}.", user_id=user.id, status="WARNING")
-        return RedirectResponse("/alerts", status_code=303)
-
-    if target not in WORKFLOW_TRANSITIONS.get(current, set()) and target != current:
-        add_log(db, "Follow-up invalid", f"Transisi {current} -> {target} tidak diizinkan untuk hasil #{result_id}.", user_id=user.id, status="WARNING")
         return RedirectResponse("/alerts", status_code=303)
 
     if target in {"HOLD", "RETURN", "RESOLVED", "CLARIFICATION", "INVESTIGATION"} and not follow_up_notes.strip():
@@ -1229,8 +1269,9 @@ def update_alert_follow_up(
 
     row.follow_up_status = target
     row.follow_up_notes = follow_up_notes.strip() or row.follow_up_notes
+    row.follow_up_source = "MANUAL"
     db.commit()
-    add_log(db, "Follow-up update", f"Hasil #{result_id} diubah ke {target}. Catatan: {follow_up_notes.strip()}", user_id=user.id, status="INFO")
+    add_log(db, "Koreksi tindak lanjut", f"Hasil #{result_id} dikoreksi manual ke {target}. Catatan: {follow_up_notes.strip()}", user_id=user.id, status="INFO")
     return RedirectResponse("/alerts", status_code=303)
 
 
@@ -1274,6 +1315,11 @@ def reports_page(
         "verification": verification,
     }
     summary = build_monitoring_context(db, user, filters)
+    (
+        summary["national_region_chart_rows"],
+        summary["national_region_focus"],
+        summary["global_region_rows"],
+    ) = _national_region_spotlight_context(db, user, filters)
     return templates.TemplateResponse(
         request=request,
         name="reports.html",
@@ -1303,6 +1349,7 @@ def verify_report_result(
         return Response(status_code=404, content="Temuan tidak ditemukan atau di luar wilayah akses.")
     row.follow_up_status = "RESOLVED"
     row.follow_up_notes = notes.strip() or "Verifikasi selesai melalui laporan FEWS."
+    row.follow_up_source = "MANUAL"
     db.commit()
     add_log(db, "Verifikasi temuan", f"Hasil #{result_id} ditandai sudah diverifikasi.", user_id=user.id)
     safe_return = return_to if return_to.startswith("/reports") and not return_to.startswith("//") else "/reports"

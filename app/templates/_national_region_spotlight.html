@@ -1,9 +1,10 @@
 <section class="executive-section national-region-spotlight" aria-labelledby="national-region-heading">
+    {% set is_report_spotlight = spotlight_surface|default('dashboard') == 'report' %}
     <div class="executive-section-heading">
         <div>
-            <span class="executive-kicker">Sorotan Utama Dashboard Pusat</span>
+            <span class="executive-kicker">{{ 'Perbandingan Wilayah untuk Laporan' if is_report_spotlight else 'Sorotan Utama Dashboard Pusat' }}</span>
             <h3 id="national-region-heading">Skor Risiko Seluruh 15 Wilayah</h3>
-            <p>Seluruh wilayah tetap terlihat. Filter periode, indikator, dan verifikasi mengubah nilainya tanpa menghilangkan wilayah lain.</p>
+            <p>Seluruh wilayah tetap terlihat. Filter periode, indikator, dan verifikasi mengubah nilainya tanpa menghilangkan wilayah lain{% if is_report_spotlight %}; analisis rinci dilanjutkan pada grafik lokasi dan indikator di bawah{% endif %}.</p>
         </div>
         <div class="executive-chart-legend" aria-label="Keterangan grafik wilayah">
             <span class="high">3 skor tertinggi</span>

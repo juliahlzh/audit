@@ -12,6 +12,9 @@
 {% set filter_action = '/reports' %}
 {% include '_monitoring_filters.html' %}
 
+{% set spotlight_surface = 'report' %}
+{% include '_national_region_spotlight.html' %}
+
 <div class="monitor-kpis report-kpis">
     <div class="monitor-kpi"><span>Total Temuan</span><strong>{{ total }}</strong><small>Dalam hasil filter</small></div>
     <div class="monitor-kpi danger"><span>Risiko Tinggi</span><strong>{{ high }}</strong><small>Prioritas investigasi</small></div>
@@ -19,15 +22,14 @@
     <div class="monitor-kpi info"><span>Lokasi Terpantau</span><strong>{{ location_rows|length }}</strong><small>Urutan risiko aktif</small></div>
 </div>
 
-{% set chart_prefix = 'report' %}
-{% include '_monitoring_visuals.html' %}
+{% include '_executive_charts.html' %}
 {% include '_ranking_tables.html' %}
 
 <section class="monitor-panel finding-table-panel">
-    <div class="monitor-panel-heading"><div><h3>Tabel Detail FEWS</h3><p>ID Unix, kesalahan, jumlah kesalahan, skor, dan verifikasi.</p></div></div>
+    <div class="monitor-panel-heading"><div><h3>Tabel Detail FEWS</h3><p>ID Unix, lokasi, kesalahan, jumlah kesalahan, dan skor.</p></div></div>
     <div class="table-wrap"><table class="wide-table detail-fews-table">
-        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Kode Lokasi</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Tipe Data</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead>
-        <tbody>{% for row in detail_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td><strong>{{ row.branch_input.location_code or '—' }}</strong></td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td>{{ row.branch_input.data_type }}</td><td><span class="verification-badge {% if row.follow_up_status == 'RESOLVED' %}verified{% endif %}">{{ row.verification_label }}</span></td><td>{% if row.follow_up_status != 'RESOLVED' and user.role in ['admin', 'auditor'] %}<form method="post" action="/reports/{{ row.id }}/verify"><input type="hidden" name="notes" value="Diverifikasi dari tabel laporan FEWS"><input type="hidden" name="return_to" value="/reports{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="verify-button" type="submit">Verifikasi</button></form>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% else %}<tr><td colspan="12">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>ID Unix</th><th>Tanggal</th><th>Wilayah</th><th>Area</th><th>Kode Lokasi</th><th>Lokasi</th><th>Kesalahan</th><th>Jumlah Kesalahan</th><th>Skor</th><th>Tipe Data</th></tr></thead>
+        <tbody>{% for row in detail_rows %}<tr><td>{{ row.branch_input.invoice_code }}</td><td>{{ row.branch_input.transaction_date|date_id }}</td><td>{{ row.branch_input.region }}</td><td>{{ row.branch_input.area }}</td><td><strong>{{ row.branch_input.location_code or '—' }}</strong></td><td>{{ row.branch_input.branch_name }}</td><td>{{ row.indicator_names|join(', ') or 'Tidak ada indikator' }}</td><td>{{ row.indicator_names|length }}</td><td><strong>{{ row.risk_score }}</strong></td><td>{{ row.branch_input.data_type }}</td></tr>{% else %}<tr><td colspan="10">Belum ada temuan pada filter ini.</td></tr>{% endfor %}</tbody>
     </table></div>
 </section>
 {% endblock %}
