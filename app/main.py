@@ -299,7 +299,11 @@ def _run_schema_migrations() -> None:
 
 @app.on_event("startup")
 def startup_event():
-    if (os.getenv("VERCEL") or os.getenv("VERCEL_ENV")) and not raw_database_url:
+    # Database migrations are intentionally run once through
+    # scripts/migrate_database.py before a production deployment. Running the
+    # data backfills from every concurrent Vercel cold start can deadlock
+    # PostgreSQL and prevent the application from starting.
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
         return
     init_db()
 

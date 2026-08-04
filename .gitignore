@@ -12,3 +12,4 @@ tmp_check_root.db*
 CATATAN_AKUN_FEWS.txt
 
 .vercel
+.env*.local

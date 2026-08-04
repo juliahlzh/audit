@@ -125,10 +125,18 @@ class QueryPerformanceTests(unittest.TestCase):
         self.assertFalse(loaded["pandas"])
         self.assertFalse(loaded["reportlab"])
 
-    def test_vercel_startup_runs_schema_migrations_when_database_url_is_present(self):
+    def test_vercel_startup_skips_schema_migrations_when_database_url_is_present(self):
         with patch.dict("os.environ", {"VERCEL": "1"}, clear=False), patch.object(
             main_module, "raw_database_url", "postgresql://user:pass@host/db"
         ), patch.object(main_module, "init_db") as init_db:
+            main_module.startup_event()
+
+        init_db.assert_not_called()
+
+    def test_non_vercel_startup_initializes_database(self):
+        with patch.dict("os.environ", {"VERCEL": "", "VERCEL_ENV": ""}, clear=False), patch.object(
+            main_module, "init_db"
+        ) as init_db:
             main_module.startup_event()
 
         init_db.assert_called_once()

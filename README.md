@@ -98,6 +98,7 @@ Test mencakup rule SOP, persistence, pembatasan wilayah, master organisasi, mode
 
 - Di Vercel, pilih **Framework Preset: FastAPI** dan arahkan **Root Directory** ke root repository yang memuat `index.py`, `requirements.txt`, dan `vercel.json`.
 - Jangan menambahkan catch-all rewrite ke `/api/index.py`; entrypoint root `index.py` membuat Vercel meneruskan path asli seperti `/login`, `/dashboard`, dan `/reports` langsung ke router FastAPI.
+- Jalankan `scripts/migrate_database.py` satu kali sebelum deploy production. Migrasi tidak dijalankan saat cold-start Vercel agar beberapa instance tidak memperbarui skema/data secara bersamaan.
 - Database lokal: `storage/fews_dana_masuk.db`.
 - Untuk Vercel/produksi, set `DATABASE_URL` ke Postgres/Supabase agar data persisten.
 - Set `FEWS_SESSION_SECRET` yang kuat dan password seed production sebelum deployment pertama.
