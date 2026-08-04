@@ -1,5 +1,5 @@
 import unittest
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +19,7 @@ class BranchInputDeleteTests(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
-    def test_delete_branch_input_archives_and_preserves_matching_results(self):
+    def test_permanent_delete_requires_archive_and_removes_matching_results(self):
         db = self.Session()
         row = BranchInput(
             transaction_date=date(2026, 6, 5),
@@ -35,12 +35,14 @@ class BranchInputDeleteTests(unittest.TestCase):
         db.add(MatchingResult(branch_input_id=row.id, status="NEED REVIEW", risk_score=5))
         db.commit()
 
+        self.assertFalse(delete_branch_input_with_results(db, row.id))
+        row.archived_at = datetime.utcnow()
+        db.commit()
         deleted = delete_branch_input_with_results(db, row.id)
 
         self.assertTrue(deleted)
-        self.assertEqual(db.query(BranchInput).count(), 1)
-        self.assertIsNotNone(db.query(BranchInput).first().archived_at)
-        self.assertEqual(db.query(MatchingResult).count(), 1)
+        self.assertEqual(db.query(BranchInput).count(), 0)
+        self.assertEqual(db.query(MatchingResult).count(), 0)
 
 
 if __name__ == "__main__":

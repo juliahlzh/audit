@@ -12,9 +12,8 @@ class VercelRoutingTests(unittest.TestCase):
 
         route_paths = {route.path for route in app.routes}
 
-        self.assertIn("/login", route_paths)
-        self.assertIn("/dashboard", route_paths)
-        self.assertIn("/reports", route_paths)
+        for path in ("/", "/login", "/dashboard", "/alerts", "/reports", "/branch-inputs", "/archives", "/health"):
+            self.assertIn(path, route_paths)
 
     def test_vercel_config_preserves_original_request_paths(self):
         config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))

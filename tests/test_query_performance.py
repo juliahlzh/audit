@@ -173,6 +173,16 @@ class QueryPerformanceTests(unittest.TestCase):
         self.assertIn("Upload Data FEWS Pusat", response.text)
         self.assertIn("1 / 2", response.text)
 
+    def test_archives_page_is_paginated_without_query_per_row(self):
+        self.db.query(BranchInput).update({BranchInput.archived_at: datetime.now()})
+        self.db.commit()
+
+        status_code, select_count = self._select_count_for("/archives")
+
+        self.assertEqual(status_code, 200)
+        self.assertIn("1 / 2", self.client.get("/archives").text)
+        self.assertLessEqual(select_count, 5)
+
     def test_responses_include_server_timing_header(self):
         response = self.client.get("/dashboard")
 
@@ -199,6 +209,7 @@ class QueryPerformanceTests(unittest.TestCase):
         branch_indexes = {item["name"] for item in inspect(self.engine).get_indexes("branch_inputs")}
         result_indexes = {item["name"] for item in inspect(self.engine).get_indexes("matching_results")}
         self.assertIn("ix_branch_inputs_active_transaction", branch_indexes)
+        self.assertIn("ix_branch_inputs_archive_page", branch_indexes)
         self.assertIn("ix_branch_inputs_source_created_at", branch_indexes)
         self.assertIn("ix_branch_inputs_location_code", branch_indexes)
         self.assertIn("ix_matching_results_risk_updated", result_indexes)

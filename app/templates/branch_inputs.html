@@ -42,7 +42,7 @@
     <div class="section-heading">
         <div>
             <h3>Data Approval Terbaru</h3>
-            <p class="muted">Sesuai SOP, data tidak dihapus permanen. Gunakan arsip/koreksi agar jejak audit tetap tersimpan.</p>
+        <p class="muted">Arsipkan data untuk memindahkannya dari monitoring aktif. Data arsip dapat dipulihkan atau dihapus permanen dari menu Arsip.</p>
         </div>
         {% if rows and user.role in ["admin", "auditor"] %}
         <form method="post" action="/branch-inputs/delete-all" onsubmit="return confirm('Arsipkan semua data approval aktif? Jejak audit tetap tersimpan.');">
@@ -82,7 +82,7 @@
                 <td>Rp {{ "{:,.0f}".format(row.amount_input_branch) }}</td>
                 <td>
                     {% if user.role in ["admin", "auditor"] %}
-                    <form method="post" action="/branch-inputs/{{ row.id }}/delete" onsubmit="return confirm('Arsipkan data approval #{{ row.id }} untuk koreksi?');">
+                    <form method="post" action="/branch-inputs/{{ row.id }}/archive" onsubmit="return confirm('Arsipkan data approval #{{ row.id }} untuk koreksi?');">
                         <input type="hidden" name="correction_reason" value="Koreksi data approval #{{ row.id }}">
                         <button class="danger-button compact-button" type="submit">Arsip/Koreksi</button>
                     </form>

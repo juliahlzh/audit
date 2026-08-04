@@ -36,7 +36,12 @@ from .database import Base, SessionLocal, engine, get_db, raw_database_url
 from .dependencies import get_current_user, require_central_admin, require_roles
 from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
 from .seed import seed_data
-from .services.branch_inputs import archive_all_branch_inputs_with_results, archive_branch_input_with_results
+from .services.branch_inputs import (
+    archive_all_branch_inputs_with_results,
+    archive_branch_input_with_results,
+    permanently_delete_branch_input_with_results,
+    restore_branch_input_with_results,
+)
 from .services.analytics import (
     build_global_location_ranking,
     build_global_region_ranking,
@@ -281,6 +286,12 @@ def _run_schema_migrations() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_branch_inputs_active_transaction "
                 "ON branch_inputs (archived_at, transaction_date, id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_branch_inputs_archive_page "
+                "ON branch_inputs (archived_at, id)"
             )
         )
         conn.execute(
@@ -666,6 +677,12 @@ def home(request: Request):
     return RedirectResponse("/dashboard" if request.session.get("user_id") else "/login", status_code=303)
 
 
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "service": "FEWS", "database": "ok"}
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html", context={"error": None})
@@ -900,19 +917,28 @@ def create_branch_input(
     return Response(status_code=410, content="Manual input sudah dinonaktifkan. Gunakan integrasi data terkontrol.")
 
 
-@app.post("/branch-inputs/{branch_input_id}/delete")
-def delete_branch_input(
+@app.post("/branch-inputs/{branch_input_id}/archive")
+def archive_branch_input(
     branch_input_id: int,
     correction_reason: str = Form("Koreksi data approval"),
     db: Session = Depends(get_db),
     user: User = Depends(require_central_admin),
 ):
     deleted = archive_branch_input_with_results(db, branch_input_id, user_id=user.id, reason=correction_reason)
-    if deleted:
-        add_log(db, "Koreksi/Arsip Data Approval", f"Data approval #{branch_input_id} diarsipkan oleh {user.username}. Alasan: {correction_reason}", user_id=user.id, status="INFO")
-    else:
-        add_log(db, "Koreksi/Arsip Data Approval Gagal", f"Data approval #{branch_input_id} tidak ditemukan.", user_id=user.id, status="WARNING")
-    return RedirectResponse("/branch-inputs", status_code=303)
+    target = "/archives" if deleted else "/branch-inputs?msg=Data tidak ditemukan"
+    return RedirectResponse(target, status_code=303)
+
+
+@app.post("/branch-inputs/{branch_input_id}/delete")
+def archive_branch_input_legacy(
+    branch_input_id: int,
+    correction_reason: str = Form("Koreksi data approval"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    """Kompatibilitas form lama: delete historis tetap berarti arsip, bukan hard delete."""
+    archive_branch_input_with_results(db, branch_input_id, user_id=user.id, reason=correction_reason)
+    return RedirectResponse("/archives", status_code=303)
 
 
 @app.post("/branch-inputs/delete-all")
@@ -922,8 +948,79 @@ def delete_all_branch_inputs(
     user: User = Depends(require_central_admin),
 ):
     deleted_count = archive_all_branch_inputs_with_results(db, user_id=user.id, reason=correction_reason)
-    add_log(db, "Koreksi/Arsip Semua Data Approval", f"{deleted_count} data approval diarsipkan oleh {user.username}. Alasan: {correction_reason}", user_id=user.id, status="WARNING")
-    return RedirectResponse("/branch-inputs?imported=0&failed=0&msg=Data approval berhasil diarsipkan", status_code=303)
+    return RedirectResponse(f"/archives?msg={deleted_count}%20data%20berhasil%20diarsipkan", status_code=303)
+
+
+@app.get("/archives", response_class=HTMLResponse)
+def archives_page(
+    request: Request,
+    msg: str = "",
+    page: int = 1,
+    per_page: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    page = max(1, page)
+    per_page = min(max(10, per_page), 100)
+    query = db.query(BranchInput).filter(BranchInput.archived_at.is_not(None))
+    total_rows = query.count()
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    rows = (
+        query.order_by(BranchInput.archived_at.desc(), BranchInput.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    row_ids = [row.id for row in rows]
+    result_counts = {}
+    if row_ids:
+        result_counts = dict(
+            db.query(MatchingResult.branch_input_id, func.count(MatchingResult.id))
+            .filter(MatchingResult.branch_input_id.in_(row_ids))
+            .group_by(MatchingResult.branch_input_id)
+            .all()
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="archives.html",
+        context={
+            "user": user,
+            "rows": rows,
+            "result_counts": result_counts,
+            "msg": msg,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_rows": total_rows,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+            },
+        },
+    )
+
+
+@app.post("/archives/{branch_input_id}/restore")
+def restore_archived_branch_input(
+    branch_input_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    restored = restore_branch_input_with_results(db, branch_input_id, user_id=user.id)
+    target = "/branch-inputs?msg=Data berhasil dipulihkan" if restored else "/archives?msg=Data arsip tidak ditemukan"
+    return RedirectResponse(target, status_code=303)
+
+
+@app.post("/archives/{branch_input_id}/delete")
+def permanently_delete_archived_branch_input(
+    branch_input_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    deleted = permanently_delete_branch_input_with_results(db, branch_input_id, user_id=user.id)
+    message = "Data dan hasil matching berhasil dihapus permanen" if deleted else "Data arsip tidak ditemukan"
+    return RedirectResponse(f"/archives?msg={quote(message)}", status_code=303)
 
 
 @app.post("/branch-inputs/upload")
@@ -980,8 +1077,8 @@ def upload_branch_input_excel(
     source_row_offset = int(df.attrs.get("source_row_offset", 2))
     safe_source_name = Path(excel_file.filename or "upload.xlsx").name[:255]
 
-    for idx, item in df.iterrows():
-        line_no = idx + source_row_offset
+    for row_offset, item in enumerate(df.to_dict(orient="records")):
+        line_no = row_offset + source_row_offset
         required_values = [item.get(col_date), item.get(col_branch), item.get(col_customer), item.get(col_input), item.get(col_invoice)]
         if all(_is_blank_cell(value) for value in required_values):
             continue

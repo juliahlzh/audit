@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Arsip Data FEWS</h2>
+        <p class="muted">Data di halaman ini tidak masuk dashboard, laporan, atau alert aktif. Restore mengaktifkan kembali data beserta hasil matching-nya.</p>
+    </div>
+</div>
+
+{% if msg %}<div class="alert ok">{{ msg }}</div>{% endif %}
+
+<div class="panel">
+    <div class="section-heading">
+        <div>
+            <h3>Data Approval Diarsipkan</h3>
+            <p class="muted">Hapus permanen juga menghapus seluruh MatchingResult terkait agar tidak menyisakan data orphan.</p>
+        </div>
+    </div>
+    <div class="alert-toolbar">
+        <strong>{{ pagination.total_rows }} data arsip</strong>
+        <div class="pager">
+            {% if pagination.has_prev %}<a href="/archives?page={{ pagination.page - 1 }}&per_page={{ pagination.per_page }}">Sebelumnya</a>{% else %}<span class="disabled">Sebelumnya</span>{% endif %}
+            <strong>{{ pagination.page }} / {{ pagination.total_pages }}</strong>
+            {% if pagination.has_next %}<a href="/archives?page={{ pagination.page + 1 }}&per_page={{ pagination.per_page }}">Berikutnya</a>{% else %}<span class="disabled">Berikutnya</span>{% endif %}
+        </div>
+    </div>
+    <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Diarsipkan</th><th>Tanggal</th><th>Kode Lokasi</th><th>Lokasi</th><th>Invoice</th><th>Hasil Matching</th><th>Alasan</th><th>Aksi</th></tr></thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>#{{ row.id }}</td>
+                <td>{{ row.archived_at|datetime_id }}</td>
+                <td>{{ row.transaction_date|date_id }}</td>
+                <td>{{ row.location_code or '—' }}</td>
+                <td>{{ row.branch_name }}</td>
+                <td>{{ row.invoice_code }}</td>
+                <td>{{ result_counts.get(row.id, 0) }}</td>
+                <td>{{ row.correction_reason or '—' }}</td>
+                <td>
+                    <div class="action-stack">
+                        <form method="post" action="/archives/{{ row.id }}/restore" onsubmit="return confirm('Pulihkan data #{{ row.id }} ke monitoring aktif?');"><button class="secondary-button compact-button" type="submit">Restore</button></form>
+                        <form method="post" action="/archives/{{ row.id }}/delete" onsubmit="return confirm('Hapus permanen data #{{ row.id }} beserta hasil matching? Tindakan ini tidak dapat dibatalkan.');"><button class="danger-button compact-button" type="submit">Hapus Permanen</button></form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}<tr><td colspan="9">Belum ada data diarsipkan.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% endblock %}

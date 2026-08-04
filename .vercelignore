@@ -2,3 +2,8 @@
 __pycache__
 *.pyc
 storage
+tests
+scripts
+docs
+sample_data
+.hallmark
