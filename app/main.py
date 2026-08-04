@@ -39,6 +39,7 @@ from .seed import seed_data
 from .services.branch_inputs import (
     archive_all_branch_inputs_with_results,
     archive_branch_input_with_results,
+    permanently_delete_all_archived_branch_inputs,
     permanently_delete_branch_input_with_results,
     restore_branch_input_with_results,
 )
@@ -1010,6 +1011,22 @@ def restore_archived_branch_input(
     restored = restore_branch_input_with_results(db, branch_input_id, user_id=user.id)
     target = "/branch-inputs?msg=Data berhasil dipulihkan" if restored else "/archives?msg=Data arsip tidak ditemukan"
     return RedirectResponse(target, status_code=303)
+
+
+@app.post("/archives/delete-all")
+def permanently_delete_all_archives(
+    confirmation: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    if confirmation != "DELETE_ALL_ARCHIVES":
+        raise HTTPException(status_code=400, detail="Konfirmasi hapus semua arsip tidak valid")
+    deleted = permanently_delete_all_archived_branch_inputs(db, user_id=user.id)
+    message = (
+        f"{deleted['branch_inputs']} data arsip dan {deleted['matching_results']} hasil matching "
+        "berhasil dihapus permanen"
+    )
+    return RedirectResponse(f"/archives?msg={quote(message)}", status_code=303)
 
 
 @app.post("/archives/{branch_input_id}/delete")

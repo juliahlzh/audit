@@ -17,6 +17,7 @@ from app.auth import hash_password  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import BranchInput, MatchingResult, User  # noqa: E402
+from app.services.branch_inputs import count_orphan_matching_results  # noqa: E402
 
 
 ROW_COUNT = 22_000
@@ -51,19 +52,48 @@ def main() -> int:
         files={"excel_file": ("load-22000.csv", build_csv(), "text/csv")},
         follow_redirects=False,
     )
-    elapsed = perf_counter() - started
+    upload_elapsed = perf_counter() - started
+    uploaded_rows = session.query(BranchInput).filter(BranchInput.archived_at.is_(None)).count()
+    uploaded_results = session.query(MatchingResult).count()
+
+    archive_started = perf_counter()
+    archive_response = client.post("/branch-inputs/delete-all", follow_redirects=False)
+    archive_elapsed = perf_counter() - archive_started
+
+    delete_started = perf_counter()
+    delete_response = client.post(
+        "/archives/delete-all",
+        data={"confirmation": "DELETE_ALL_ARCHIVES"},
+        follow_redirects=False,
+    )
+    delete_elapsed = perf_counter() - delete_started
     result = {
         "rows_requested": ROW_COUNT,
-        "active_rows": session.query(BranchInput).filter(BranchInput.archived_at.is_(None)).count(),
-        "matching_results": session.query(MatchingResult).count(),
-        "status_code": response.status_code,
-        "elapsed_seconds": round(elapsed, 3),
+        "uploaded_rows": uploaded_rows,
+        "uploaded_results": uploaded_results,
+        "upload_status_code": response.status_code,
+        "upload_elapsed_seconds": round(upload_elapsed, 3),
+        "archive_status_code": archive_response.status_code,
+        "archive_elapsed_seconds": round(archive_elapsed, 3),
+        "delete_status_code": delete_response.status_code,
+        "delete_elapsed_seconds": round(delete_elapsed, 3),
+        "remaining_rows": session.query(BranchInput).count(),
+        "remaining_results": session.query(MatchingResult).count(),
+        "orphan_results": count_orphan_matching_results(session),
     }
     print(json.dumps(result, sort_keys=True))
     app.dependency_overrides.clear()
     session.close()
     engine.dispose()
-    return 0 if result["active_rows"] == ROW_COUNT and result["matching_results"] == ROW_COUNT else 1
+    return (
+        0
+        if result["uploaded_rows"] == ROW_COUNT
+        and result["uploaded_results"] == ROW_COUNT
+        and result["remaining_rows"] == 0
+        and result["remaining_results"] == 0
+        and result["orphan_results"] == 0
+        else 1
+    )
 
 
 if __name__ == "__main__":

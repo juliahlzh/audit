@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -119,6 +120,41 @@ def permanently_delete_branch_input_with_results(
     )
     db.commit()
     return True
+
+
+def permanently_delete_all_archived_branch_inputs(
+    db: Session, user_id: int | None = None
+) -> dict[str, int]:
+    """Hapus semua arsip dan hasil matching terkait tanpa memuat row ke memori."""
+    archived_ids = select(BranchInput.id).where(BranchInput.archived_at.is_not(None))
+    archived_count = db.query(BranchInput).filter(BranchInput.archived_at.is_not(None)).count()
+    if archived_count == 0:
+        return {"branch_inputs": 0, "matching_results": 0}
+
+    try:
+        deleted_results = (
+            db.query(MatchingResult)
+            .filter(MatchingResult.branch_input_id.in_(archived_ids))
+            .delete(synchronize_session=False)
+        )
+        deleted_archives = (
+            db.query(BranchInput)
+            .filter(BranchInput.archived_at.is_not(None))
+            .delete(synchronize_session=False)
+        )
+        db.add(
+            AuditLog(
+                user_id=user_id,
+                action="Hapus Permanen Semua Arsip",
+                status="WARNING",
+                notes=f"{deleted_archives} data arsip dan {deleted_results} hasil matching dihapus permanen.",
+            )
+        )
+        db.commit()
+        return {"branch_inputs": deleted_archives, "matching_results": deleted_results}
+    except Exception:
+        db.rollback()
+        raise
 
 
 def count_orphan_matching_results(db: Session) -> int:

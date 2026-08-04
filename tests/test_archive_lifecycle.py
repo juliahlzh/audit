@@ -92,6 +92,44 @@ class ArchiveLifecycleTests(unittest.TestCase):
         self.assertEqual(self.db.query(User).count(), users_before)
         self.assertEqual(count_orphan_matching_results(self.db), 0)
 
+    def test_delete_all_archives_removes_every_archived_row_and_matching_result(self):
+        for index in range(3):
+            self.client.post(
+                "/branch-inputs/upload",
+                files={
+                    "excel_file": (
+                        f"bulk-{index}.csv",
+                        CSV_ROW.replace(b"LIFE-1", f"BULK-{index}".encode("utf-8")),
+                        "text/csv",
+                    )
+                },
+                follow_redirects=False,
+            )
+        self.client.post("/branch-inputs/delete-all", follow_redirects=False)
+        users_before = self.db.query(User).count()
+
+        response = self.client.post(
+            "/archives/delete-all",
+            data={"confirmation": "DELETE_ALL_ARCHIVES"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("3%20data%20arsip", response.headers["location"])
+        self.assertEqual(self.db.query(BranchInput).count(), 0)
+        self.assertEqual(self.db.query(MatchingResult).count(), 0)
+        self.assertEqual(self.db.query(User).count(), users_before)
+        self.assertEqual(count_orphan_matching_results(self.db), 0)
+
+    def test_delete_all_archives_rejects_invalid_confirmation(self):
+        response = self.client.post(
+            "/archives/delete-all",
+            data={"confirmation": "WRONG"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,12 @@
             <h3>Data Approval Diarsipkan</h3>
             <p class="muted">Hapus permanen juga menghapus seluruh MatchingResult terkait agar tidak menyisakan data orphan.</p>
         </div>
+        {% if pagination.total_rows > 0 %}
+        <form method="post" action="/archives/delete-all" onsubmit="return confirm('Hapus permanen SEMUA {{ pagination.total_rows }} data arsip beserta seluruh hasil matching? Tindakan ini tidak dapat dibatalkan.');">
+            <input type="hidden" name="confirmation" value="DELETE_ALL_ARCHIVES">
+            <button class="danger-button" type="submit">Hapus Permanen Semua</button>
+        </form>
+        {% endif %}
     </div>
     <div class="alert-toolbar">
         <strong>{{ pagination.total_rows }} data arsip</strong>
