@@ -130,6 +130,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Upload hari berikutnya mempertahankan histori hari sebelumnya; koreksi dengan `idunix` sama tidak menghasilkan dua versi aktif.
 - Route `/`, `/login`, `/dashboard`, `/alerts`, `/reports`, `/branch-inputs`, `/archives`, dan `/health` tidak boleh menghasilkan 404 pada runtime Vercel.
 - Upload sampai 25.000 baris (target operasional sekitar 22.000 baris) diproses secara batch dan seluruh daftar aktif/arsip memakai pagination berbasis database.
+- Kolom uraian pelanggan/siswa dan referensi bukti menerima teks panjang dari format Excel operasional; kegagalan database harus rollback seluruh batch dan kembali ke halaman upload dengan pesan yang dapat dipahami, bukan response 500.
 - Admin Pusat dapat mengarsipkan data aktif, melihat arsip berpaginasi, memulihkan data, lalu menghapus permanen data arsip beserta seluruh `MatchingResult` terkait.
 - Admin Pusat dapat menghapus permanen seluruh data arsip sekaligus melalui satu konfirmasi eksplisit; operasi bulk menggunakan query database dan tidak memuat belasan ribu row ke memori.
 - Pembersihan data monitoring menghapus data aktif, arsip, mutasi, dan hasil matching secara transaksional tanpa menyentuh user, role, konfigurasi, atau master organisasi.

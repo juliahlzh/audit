@@ -4,7 +4,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Text, create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -87,6 +88,50 @@ class UploadSafetyTests(unittest.TestCase):
         self.assertIn("imported=1", response.headers["location"])
         self.assertIn("failed=1", response.headers["location"])
         self.assertEqual(self.db.query(BranchInput).filter(BranchInput.archived_at.is_(None)).count(), 1)
+
+    def test_upload_accepts_long_customer_and_proof_reference_values(self):
+        self.assertIsInstance(BranchInput.__table__.c.customer_name.type, Text)
+        self.assertIsInstance(BranchInput.__table__.c.proof_reference.type, Text)
+        long_customer = "Nama siswa dan keterangan panjang " + ("A" * 220)
+        long_reference = "REFERENSI-" + ("B" * 220)
+        csv_data = (
+            "tgl_bukubesar,kodelokasi,keterangan_dr_lokasi,jumlah_biaya,jumlah_setor,idunix,bank,proof_reference\n"
+            f"2026-07-01,278,{long_customer},1000,1000,LONG-1,transfer,{long_reference}\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("long-values.csv", csv_data, "text/csv")},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        row = self.db.query(BranchInput).filter_by(invoice_code="LONG-1").one()
+        self.assertEqual(row.customer_name, long_customer)
+        self.assertEqual(row.proof_reference, long_reference)
+
+    def test_database_error_returns_upload_message_and_rolls_back(self):
+        csv_data = (
+            "tgl_bukubesar,kodelokasi,keterangan_dr_lokasi,jumlah_biaya,jumlah_setor,idunix,bank\n"
+            "2026-07-01,278,Baris error,1000,1000,DB-ERROR-1,transfer\n"
+        ).encode("utf-8")
+        original_flush = self.db.flush
+
+        def failing_flush(*args, **kwargs):
+            if self.db.new:
+                raise SQLAlchemyError("forced database failure")
+            return original_flush(*args, **kwargs)
+
+        with patch.object(self.db, "flush", side_effect=failing_flush):
+            response = self.client.post(
+                "/branch-inputs/upload",
+                files={"excel_file": ("db-error.csv", csv_data, "text/csv")},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("Upload gagal disimpan", self._message(response))
+        self.assertEqual(self.db.query(BranchInput).count(), 0)
 
     def test_security_headers_are_present(self):
         response = self.client.get("/dashboard")

@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, text
 from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -193,6 +194,37 @@ def _add_column_if_missing(table_name: str, column_name: str, sqlite_sql: str, p
         conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}"))
 
 
+def _ensure_import_text_capacity() -> None:
+    """Apply the small import-capacity migration inside the Vercel runtime.
+
+    Sensitive Vercel environment values cannot be downloaded by the CLI, so
+    this narrowly scoped, idempotent migration must run where DATABASE_URL is
+    actually available. An advisory transaction lock prevents concurrent cold
+    starts from racing on the ALTER TABLE statements.
+    """
+    if not engine.dialect.name.startswith("postgres"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(60322026)"))
+        column_types = dict(
+            conn.execute(
+                text(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = 'branch_inputs' "
+                    "AND column_name IN ('customer_name', 'proof_reference')"
+                )
+            ).all()
+        )
+        if column_types.get("customer_name") != "text":
+            conn.execute(text("ALTER TABLE branch_inputs ALTER COLUMN customer_name TYPE TEXT"))
+        if column_types.get("proof_reference") != "text":
+            conn.execute(text("ALTER TABLE branch_inputs ALTER COLUMN proof_reference TYPE TEXT"))
+        # B-tree indexes can reject exceptionally long text values and are not
+        # used by the current ILIKE search path.
+        conn.execute(text("DROP INDEX IF EXISTS ix_branch_inputs_customer_name"))
+        conn.execute(text("DROP INDEX IF EXISTS ix_branch_inputs_proof_reference"))
+
+
 def _run_schema_migrations() -> None:
     # Lightweight migration untuk kompatibilitas DB lama.
     _add_column_if_missing("branch_inputs", "transaction_time", "VARCHAR(20)")
@@ -207,7 +239,7 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("branch_inputs", "bank_target", "VARCHAR(80)")
     _add_column_if_missing("branch_inputs", "proof_bank", "VARCHAR(80)")
     _add_column_if_missing("branch_inputs", "destination_account", "VARCHAR(100)")
-    _add_column_if_missing("branch_inputs", "proof_reference", "VARCHAR(150)")
+    _add_column_if_missing("branch_inputs", "proof_reference", "TEXT")
     _add_column_if_missing("branch_inputs", "student_list", "TEXT")
     _add_column_if_missing("branch_inputs", "source_file_name", "VARCHAR(255)")
     _add_column_if_missing("branch_inputs", "source_row_number", "INTEGER")
@@ -223,6 +255,7 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
     _add_column_if_missing("matching_results", "follow_up_source", "VARCHAR(20) DEFAULT 'AUTO'")
+    _ensure_import_text_capacity()
     with engine.begin() as conn:
         conn.execute(
             text(
@@ -316,6 +349,8 @@ def startup_event():
     # data backfills from every concurrent Vercel cold start can deadlock
     # PostgreSQL and prevent the application from starting.
     if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+        if raw_database_url:
+            _ensure_import_text_capacity()
         return
     init_db()
 
@@ -1184,38 +1219,54 @@ def upload_branch_input_excel(
         )
 
     updated_rows = 0
-    if inserted_rows:
-        incoming_codes = [row.invoice_code for row in inserted_rows]
-        existing_rows: list[BranchInput] = []
-        for offset in range(0, len(incoming_codes), 900):
-            existing_rows.extend(
-                db.query(BranchInput)
-                .filter(
-                    BranchInput.archived_at.is_(None),
-                    BranchInput.invoice_code.in_(incoming_codes[offset : offset + 900]),
+    try:
+        if inserted_rows:
+            incoming_codes = [row.invoice_code for row in inserted_rows]
+            existing_rows: list[BranchInput] = []
+            for offset in range(0, len(incoming_codes), 900):
+                existing_rows.extend(
+                    db.query(BranchInput)
+                    .filter(
+                        BranchInput.archived_at.is_(None),
+                        BranchInput.invoice_code.in_(incoming_codes[offset : offset + 900]),
+                    )
+                    .all()
                 )
-                .all()
-            )
-        if existing_rows:
-            archived_at = datetime.utcnow()
-            for existing in existing_rows:
-                existing.archived_at = archived_at
-                existing.correction_reason = f"Diperbarui oleh upload: {safe_source_name}"
-                existing.correction_notes = "Versi sebelumnya tetap disimpan sebagai jejak audit."
-            updated_rows = len(existing_rows)
-        db.add_all(inserted_rows)
-        db.flush()
-        run_matching(db, branch_ids=[row.id for row in inserted_rows])
+            if existing_rows:
+                archived_at = datetime.utcnow()
+                for existing in existing_rows:
+                    existing.archived_at = archived_at
+                    existing.correction_reason = f"Diperbarui oleh upload: {safe_source_name}"
+                    existing.correction_notes = "Versi sebelumnya tetap disimpan sebagai jejak audit."
+                updated_rows = len(existing_rows)
+            db.add_all(inserted_rows)
+            db.flush()
+            run_matching(db, branch_ids=[row.id for row in inserted_rows])
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Upload %s gagal saat menyimpan batch ke database", safe_source_name)
+        message = quote(
+            "Upload gagal disimpan karena ada nilai yang tidak sesuai kapasitas database. "
+            "Tidak ada data parsial yang disimpan; silakan coba kembali"
+        )
+        return RedirectResponse(
+            f"/branch-inputs?imported=0&updated=0&failed={len(inserted_rows)}&msg={message}",
+            status_code=303,
+        )
 
     log_status = "WARNING" if failed_rows else "INFO"
-    add_log(
-        db,
-        "Upload Excel Input Cabang",
-        f"{user.username} upload {len(inserted_rows)} baris valid, {updated_rows} pembaruan, "
-        f"{len(failed_rows)} baris gagal dari {safe_source_name}.",
-        user_id=user.id,
-        status=log_status,
-    )
+    try:
+        add_log(
+            db,
+            "Upload Excel Input Cabang",
+            f"{user.username} upload {len(inserted_rows)} baris valid, {updated_rows} pembaruan, "
+            f"{len(failed_rows)} baris gagal dari {safe_source_name}.",
+            user_id=user.id,
+            status=log_status,
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Data %s tersimpan, tetapi audit log upload gagal", safe_source_name)
 
     msg = "Upload selesai"
     if failed_rows:

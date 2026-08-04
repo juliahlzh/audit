@@ -128,10 +128,13 @@ class QueryPerformanceTests(unittest.TestCase):
     def test_vercel_startup_skips_schema_migrations_when_database_url_is_present(self):
         with patch.dict("os.environ", {"VERCEL": "1"}, clear=False), patch.object(
             main_module, "raw_database_url", "postgresql://user:pass@host/db"
-        ), patch.object(main_module, "init_db") as init_db:
+        ), patch.object(main_module, "init_db") as init_db, patch.object(
+            main_module, "_ensure_import_text_capacity"
+        ) as ensure_import_text_capacity:
             main_module.startup_event()
 
         init_db.assert_not_called()
+        ensure_import_text_capacity.assert_called_once()
 
     def test_non_vercel_startup_initializes_database(self):
         with patch.dict("os.environ", {"VERCEL": "", "VERCEL_ENV": ""}, clear=False), patch.object(
