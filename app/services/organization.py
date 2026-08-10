@@ -13,6 +13,7 @@ Sumatera Bagian Utara|Area Medan|Medan Johor
 Sumatera Bagian Utara|Area Pekanbaru|Hangtuah
 Sumatera Bagian Utara|Area Pekanbaru|Tanjung Datuk
 Sumatera Bagian Utara|Area Pekanbaru|Panam
+Sumatera Bagian Utara|Area Pekanbaru|Harapan Raya
 Sumatera Bagian Utara|Area Sumatra Barat|Payakumbuh
 Sumatera Bagian Utara|Area Sumatra Barat|Bukit Tinggi
 Sumatera Bagian Selatan|Area Jambi|The Hok
@@ -165,6 +166,7 @@ Jatijaya|Area Joglosemar|Kartasura
 Jatijaya|Area Joglosemar|Surakarta
 Jatijaya|Area Joglosemar|Semarang
 Jatijaya|Area Joglosemar|AM Sangaji
+Jatijaya|Area Joglosemar|Hos Cokroaminoto
 Jatijaya|Area Jawa Timur|Sidoarjo
 Jatijaya|Area Jawa Timur|SMA Komplek
 Jatijaya|Area Jawa Timur|Gayungsari
@@ -182,6 +184,7 @@ _LOCATION_CODE_TEXT = """
 286|Medan Johor
 239|Tanjung Datuk
 259|Panam
+206|Harapan Raya
 289|Hangtuah
 257|Bukit Tinggi
 277|Payakumbuh
@@ -337,6 +340,7 @@ _LOCATION_CODE_TEXT = """
 245|Semarang
 246|Kartasura
 260|AM Sangaji
+207|Hos Cokroaminoto
 284|Tegal
 291|Sidoarjo
 292|Purwokerto

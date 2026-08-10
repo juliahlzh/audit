@@ -155,6 +155,77 @@ class LogoutPersistenceTests(unittest.TestCase):
         self.assertIsNone(versions[1].archived_at)
         self.assertEqual(versions[1].amount_input_branch, 2000)
 
+    def test_raw_sil_rows_allow_shared_idunix_and_use_source_id_for_revision(self):
+        self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
+        header = "id,tanggal,lb,nama,jumlah,idunix,type_bayar,created_at\n"
+        first = (
+            header
+            + "442665,2026-08-06,206,Customer A,4715000,206-260806,TRANS,2026-08-06 22:33:32\n"
+            + "442666,2026-08-06,206,Customer B,1200000,206-260806,KOMBI,2026-08-06 22:34:00\n"
+        ).encode("utf-8")
+        response = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("trx.csv", first, "text/csv")},
+            follow_redirects=False,
+        )
+
+        self.assertIn("imported=2", response.headers["location"])
+        rows = self.db.query(BranchInput).filter(BranchInput.invoice_code == "206-260806").order_by(BranchInput.source_record_id).all()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([row.source_record_id for row in rows], ["trx:442665", "trx:442666"])
+        self.assertEqual(rows[0].branch_name, "Harapan Raya")
+        self.assertEqual(rows[0].area, "Area Pekanbaru")
+        self.assertEqual(rows[0].region, "Sumatera Bagian Utara")
+        self.assertEqual(rows[1].payment_method, "kombi")
+
+        revision = (
+            header
+            + "442665,2026-08-06,207,Customer A Revision,5000000,207-260806,TUNAI,2026-08-06 23:00:00\n"
+        ).encode("utf-8")
+        revised = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("trx-revision.csv", revision, "text/csv")},
+            follow_redirects=False,
+        )
+
+        self.assertIn("updated=1", revised.headers["location"])
+        sibling = self.db.query(BranchInput).filter_by(source_record_id="trx:442666").one()
+        self.assertIsNone(sibling.archived_at)
+        active_revision = self.db.query(BranchInput).filter_by(source_record_id="trx:442665", archived_at=None).one()
+        self.assertEqual(active_revision.branch_name, "Hos Cokroaminoto")
+        self.assertEqual(active_revision.area, "Area Joglosemar")
+        self.assertEqual(active_revision.region, "Jatijaya")
+
+        archived_original = (
+            self.db.query(BranchInput)
+            .filter(BranchInput.source_record_id == "trx:442665", BranchInput.archived_at.is_not(None))
+            .one()
+        )
+        restored = self.client.post(f"/archives/{archived_original.id}/restore", follow_redirects=False)
+        self.assertEqual(restored.status_code, 303)
+        self.assertIsNone(self.db.query(BranchInput).filter_by(id=archived_original.id).one().archived_at)
+        self.assertIsNotNone(self.db.query(BranchInput).filter_by(id=active_revision.id).one().archived_at)
+        self.assertIsNone(self.db.query(BranchInput).filter_by(source_record_id="trx:442666").one().archived_at)
+
+    def test_setoran_headers_allow_shared_idunix_when_source_ids_differ(self):
+        self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
+        csv_data = (
+            "id,kodelokasi,idunix,tgl_bukubesar,jumlah_biaya,bank,jumlah_setor,keterangan_dr_lokasi,created_at\n"
+            "351327,242,242-260802,2026-08-02,5100000,TRANS,5100000,Customer Setoran A,2026-08-02 09:00:00\n"
+            "351329,242,242-260802,2026-08-02,670000,KOMBI,670000,Customer Setoran B,2026-08-02 09:01:00\n"
+        ).encode("utf-8")
+        response = self.client.post(
+            "/branch-inputs/upload",
+            files={"excel_file": ("setoran.csv", csv_data, "text/csv")},
+            follow_redirects=False,
+        )
+
+        self.assertIn("imported=2", response.headers["location"])
+        rows = self.db.query(BranchInput).filter(BranchInput.invoice_code == "242-260802").all()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row.source_record_id for row in rows}, {"setoran:351327", "setoran:351329"})
+        self.assertEqual({row.payment_method for row in rows}, {"transfer", "kombi"})
+
     def test_manual_input_route_is_disabled(self):
         self.client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
         response = self.client.post(

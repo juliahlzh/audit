@@ -140,12 +140,13 @@ templates.env.filters["datetime_id"] = _format_datetime_id
 
 HEADER_ALIASES = {
     "transaction_date": ["tanggal transaksi", "tanggal", "tgl transaksi", "tgl", "tgl bukubesar", "tgl_bukubesar", "tanggal pembayaran"],
-    "branch_name": ["nama cabang", "cabang", "nama lokasi", "lokasi", "location", "kodelokasi", "kode lokasi"],
-    "customer_name": ["nama customer", "customer", "nama pelanggan", "pelanggan", "nama siswa", "siswa", "keterangan_dr_lokasi", "keterangan dr lokasi"],
-    "amount_should_pay": ["nominal yang harus dibayar", "nominal harus bayar", "nominal harus dibayar", "amount should pay", "jumlah_biaya", "jumlah biaya", "nominal transaksi"],
-    "amount_input_branch": ["nominal yang diinput cabang", "nominal input cabang", "nominal input", "amount input", "nominal dibayar", "jumlah_setor", "jumlah setor", "nominal setor"],
-    "payment_method": ["metode pembayaran", "metode", "payment method", "cara bayar", "bank", "pilihan_bank", "pilihan bank", "tipe bayar"],
+    "branch_name": ["nama cabang", "cabang", "nama lokasi", "lokasi", "location", "kodelokasi", "kode lokasi", "lb"],
+    "customer_name": ["nama customer", "customer", "nama pelanggan", "pelanggan", "nama siswa", "siswa", "keterangan_dr_lokasi", "keterangan dr lokasi", "nama"],
+    "amount_should_pay": ["nominal yang harus dibayar", "nominal harus bayar", "nominal harus dibayar", "amount should pay", "jumlah_biaya", "jumlah biaya", "nominal transaksi", "jumlah"],
+    "amount_input_branch": ["nominal yang diinput cabang", "nominal input cabang", "nominal input", "amount input", "nominal dibayar", "jumlah_setor", "jumlah setor", "nominal setor", "jumlah"],
+    "payment_method": ["metode pembayaran", "metode", "payment method", "cara bayar", "bank", "pilihan_bank", "pilihan bank", "tipe bayar", "type_bayar", "type bayar"],
     "invoice_code": ["kode unik/invoice", "kode unik", "invoice", "kode invoice", "nomor invoice", "no invoice", "idunix", "id unix", "id unix/idunix"],
+    "source_record_id": ["id", "id transaksi", "transaction id", "source id", "source_record_id"],
     "notes": ["keterangan", "catatan", "notes", "remark", "catatan", "nokwt_awal", "nokwt_akhir"],
     "transaction_time": ["jam transaksi", "waktu transaksi", "jam", "jam input"],
     "source_created_at": ["created_at", "waktu_input", "tgl input", "tanggal input", "input_at", "input at", "tanggal input data", "waktu input"],
@@ -219,6 +220,13 @@ def _ensure_import_text_capacity() -> None:
             conn.execute(text("ALTER TABLE branch_inputs ALTER COLUMN customer_name TYPE TEXT"))
         if column_types.get("proof_reference") != "text":
             conn.execute(text("ALTER TABLE branch_inputs ALTER COLUMN proof_reference TYPE TEXT"))
+        conn.execute(text("ALTER TABLE branch_inputs ADD COLUMN IF NOT EXISTS source_record_id VARCHAR(100)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_branch_inputs_source_record_id "
+                "ON branch_inputs (source_record_id)"
+            )
+        )
         # B-tree indexes can reject exceptionally long text values and are not
         # used by the current ILIKE search path.
         conn.execute(text("DROP INDEX IF EXISTS ix_branch_inputs_customer_name"))
@@ -243,6 +251,7 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("branch_inputs", "student_list", "TEXT")
     _add_column_if_missing("branch_inputs", "source_file_name", "VARCHAR(255)")
     _add_column_if_missing("branch_inputs", "source_row_number", "INTEGER")
+    _add_column_if_missing("branch_inputs", "source_record_id", "VARCHAR(100)")
     _add_column_if_missing("branch_inputs", "archived_at", "DATETIME", "TIMESTAMP")
     _add_column_if_missing("branch_inputs", "correction_reason", "TEXT")
     _add_column_if_missing("branch_inputs", "correction_notes", "TEXT")
@@ -255,6 +264,8 @@ def _run_schema_migrations() -> None:
     _add_column_if_missing("matching_results", "follow_up_status", "VARCHAR(30) DEFAULT 'OPEN'")
     _add_column_if_missing("matching_results", "follow_up_notes", "TEXT")
     _add_column_if_missing("matching_results", "follow_up_source", "VARCHAR(20) DEFAULT 'AUTO'")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_inputs_source_record_id ON branch_inputs (source_record_id)"))
     _ensure_import_text_capacity()
     with engine.begin() as conn:
         conn.execute(
@@ -372,6 +383,16 @@ WORKFLOW_TRANSITIONS = {
 
 def _normalize_header(value: str) -> str:
     return "".join(ch for ch in str(value).strip().lower() if ch.isalnum() or ch.isspace()).strip()
+
+
+def _source_record_namespace(df) -> str:
+    """Pisahkan ID teknis yang berasal dari tabel SIL berbeda."""
+    headers = {_normalize_header(column) for column in df.columns}
+    if _normalize_header("lb") in headers and _normalize_header("jumlah") in headers:
+        return "trx"
+    if _normalize_header("kodelokasi") in headers and _normalize_header("jumlah_setor") in headers:
+        return "setoran"
+    return "upload"
 
 
 def _alias_lookup() -> dict[str, str]:
@@ -1101,6 +1122,7 @@ def upload_branch_input_excel(
         col_customer = _extract_column(df, "customer_name", required=True)
         col_input = _extract_column(df, "amount_input_branch", required=True)
         col_invoice = _extract_column(df, "invoice_code", required=True)
+        col_source_record_id = _extract_column(df, "source_record_id", required=False)
         col_should = _extract_column(df, "amount_should_pay", required=False)
         col_payment = _extract_column(df, "payment_method", required=False)
         col_notes = _extract_column(df, "notes", required=False)
@@ -1125,9 +1147,10 @@ def upload_branch_input_excel(
 
     inserted_rows: list[BranchInput] = []
     failed_rows: list[str] = []
-    seen_invoice_codes: set[str] = set()
+    seen_record_keys: set[str] = set()
     source_row_offset = int(df.attrs.get("source_row_offset", 2))
     safe_source_name = Path(excel_file.filename or "upload.xlsx").name[:255]
+    source_namespace = _source_record_namespace(df)
 
     for row_offset, item in enumerate(df.to_dict(orient="records")):
         line_no = row_offset + source_row_offset
@@ -1150,23 +1173,33 @@ def upload_branch_input_excel(
             amount_should = amount_input
 
         invoice_code = str(item.get(col_invoice) or "").strip()
+        raw_source_record_id = str(item.get(col_source_record_id) or "").strip() if col_source_record_id else ""
+        source_record_id = f"{source_namespace}:{raw_source_record_id}" if raw_source_record_id else ""
         raw_location = str(item.get(col_branch) or "").strip()
         location_code, branch_name, region, area = resolve_location(raw_location)
         customer_name = str(item.get(col_customer) or "").strip()
         if not invoice_code or not branch_name or not customer_name:
             failed_rows.append(f"Baris {line_no}: field wajib (cabang/customer/invoice) kosong.")
             continue
-        if invoice_code in seen_invoice_codes:
-            failed_rows.append(f"Baris {line_no}: idunix/invoice '{invoice_code}' duplikat dalam file.")
+        record_key = f"source:{source_record_id}" if source_record_id else f"invoice:{invoice_code}"
+        if record_key in seen_record_keys:
+            label = f"ID sumber '{raw_source_record_id}'" if source_record_id else f"idunix/invoice '{invoice_code}'"
+            failed_rows.append(f"Baris {line_no}: {label} duplikat dalam file.")
             continue
         if not location_code:
             failed_rows.append(f"Baris {line_no}: kode lokasi SIL '{raw_location}' tidak dikenal.")
             continue
-        seen_invoice_codes.add(invoice_code)
+        seen_record_keys.add(record_key)
 
-        payment_method = str(item.get(col_payment) or "transfer").strip().lower() if col_payment else "transfer"
-        if payment_method not in {"transfer", "tunai"}:
-            payment_method = "transfer"
+        payment_method_raw = str(item.get(col_payment) or "transfer").strip().lower() if col_payment else "transfer"
+        payment_method = {
+            "trans": "transfer",
+            "transfer": "transfer",
+            "tunai": "tunai",
+            "cash": "tunai",
+            "kombi": "kombi",
+            "kombinasi": "kombi",
+        }.get(payment_method_raw, "transfer")
 
         transaction_time = str(item.get(col_trx_time) or "").strip() if col_trx_time else ""
         notes = str(item.get(col_notes) or "").strip() if col_notes else ""
@@ -1198,6 +1231,7 @@ def upload_branch_input_excel(
                 amount_input_branch=amount_input,
                 payment_method=payment_method,
                 invoice_code=invoice_code,
+                source_record_id=source_record_id or None,
                 transaction_time=transaction_time or None,
                 bank_date=bank_date,
                 deposit_date=deposit_date,
@@ -1221,14 +1255,25 @@ def upload_branch_input_excel(
     updated_rows = 0
     try:
         if inserted_rows:
-            incoming_codes = [row.invoice_code for row in inserted_rows]
+            incoming_source_ids = [row.source_record_id for row in inserted_rows if row.source_record_id]
+            incoming_legacy_codes = [row.invoice_code for row in inserted_rows if not row.source_record_id]
             existing_rows: list[BranchInput] = []
-            for offset in range(0, len(incoming_codes), 900):
+            for offset in range(0, len(incoming_source_ids), 900):
                 existing_rows.extend(
                     db.query(BranchInput)
                     .filter(
                         BranchInput.archived_at.is_(None),
-                        BranchInput.invoice_code.in_(incoming_codes[offset : offset + 900]),
+                        BranchInput.source_record_id.in_(incoming_source_ids[offset : offset + 900]),
+                    )
+                    .all()
+                )
+            for offset in range(0, len(incoming_legacy_codes), 900):
+                existing_rows.extend(
+                    db.query(BranchInput)
+                    .filter(
+                        BranchInput.archived_at.is_(None),
+                        BranchInput.source_record_id.is_(None),
+                        BranchInput.invoice_code.in_(incoming_legacy_codes[offset : offset + 900]),
                     )
                     .all()
                 )

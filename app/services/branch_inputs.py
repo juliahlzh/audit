@@ -67,13 +67,14 @@ def restore_branch_input_with_results(db: Session, branch_input_id: int, user_id
         return False
 
     now = datetime.utcnow()
+    identity_filter = (
+        BranchInput.source_record_id == row.source_record_id
+        if row.source_record_id
+        else (BranchInput.source_record_id.is_(None) & (BranchInput.invoice_code == row.invoice_code))
+    )
     (
         db.query(BranchInput)
-        .filter(
-            BranchInput.id != row.id,
-            BranchInput.invoice_code == row.invoice_code,
-            BranchInput.archived_at.is_(None),
-        )
+        .filter(BranchInput.id != row.id, identity_filter, BranchInput.archived_at.is_(None))
         .update(
             {
                 BranchInput.archived_at: now,

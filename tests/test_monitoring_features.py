@@ -216,10 +216,12 @@ class MonitoringFeatureTests(unittest.TestCase):
 
     def test_organization_master_matches_source_deck(self):
         self.assertEqual(len(REGIONAL_ACCOUNTS), 15)
-        self.assertEqual(len(ORGANIZATION_ROWS), 166)
+        self.assertEqual(len(ORGANIZATION_ROWS), 168)
         self.assertEqual(len({area for _, area, _ in ORGANIZATION_ROWS}), 41)
-        self.assertEqual(len(ORGANIZATION_CODE_ROWS), 166)
-        self.assertEqual(len({code for code, _, _, _ in ORGANIZATION_CODE_ROWS}), 166)
+        self.assertEqual(len(ORGANIZATION_CODE_ROWS), 168)
+        self.assertEqual(len({code for code, _, _, _ in ORGANIZATION_CODE_ROWS}), 168)
+        self.assertEqual(resolve_location("206"), ("206", "Harapan Raya", "Sumatera Bagian Utara", "Area Pekanbaru"))
+        self.assertEqual(resolve_location("207"), ("207", "Hos Cokroaminoto", "Jatijaya", "Area Joglosemar"))
 
     def test_sil_location_code_maps_name_region_and_area(self):
         self.assertEqual(

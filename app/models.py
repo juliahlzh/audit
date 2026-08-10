@@ -105,6 +105,7 @@ class BranchInput(Base):
     amount_input_branch: Mapped[float] = mapped_column(Float, index=True)
     payment_method: Mapped[str] = mapped_column(String(30), index=True)
     invoice_code: Mapped[str] = mapped_column(String(100), index=True)
+    source_record_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     bank_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     officer_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     deposit_officer_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
