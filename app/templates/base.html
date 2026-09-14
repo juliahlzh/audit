@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FEWS Approval Monitoring</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/style.css?v=20260723-dashboard-summary-3">
+    <link rel="stylesheet" href="/static/style.css?v=20260914-collection-1">
 </head>
 <body>
     <div class="layout">
@@ -30,7 +30,13 @@
                 <a href="/alerts" data-nav="/alerts">
                     <span class="nav-icon" aria-hidden="true">!</span>Alert Center
                 </a>
+                <a href="/collections" data-nav="/collections">
+                    <span class="nav-icon" aria-hidden="true">Rp</span>Collection
+                </a>
                 {% if user.role == 'admin' and not user.region %}
+                <a href="/collections/attention" data-nav="/collections/attention">
+                    <span class="nav-icon" aria-hidden="true">⌁</span>Need Attention
+                </a>
                 <a href="/branch-inputs" data-nav="/branch-inputs">
                     <span class="nav-icon" aria-hidden="true">↑</span>Upload Data
                 </a>

@@ -17,6 +17,7 @@ FEWS adalah aplikasi monitoring audit untuk mendeteksi indikator fraud, memering
 - Admin Pusat memiliki **Dashboard**, **Info**, **Laporan**, **Alert Center**, dan **Upload Data** serta dapat melihat seluruh wilayah.
 - Admin Wilayah hanya memiliki **Dashboard**, **Laporan**, dan **Alert Center** dalam mode view-only.
 - Data uji dan data realistis sintetis untuk QA.
+- Central Collection Monitoring memisahkan status pembayaran VA dari aktivitas follow-up staff, menyediakan Need Attention nasional, histori reminder, dan akses collection yang dibatasi per wilayah.
 
 Manual input tetap dinonaktifkan. Upload Excel/CSV hanya tersedia untuk Admin Pusat; kode lokasi SIL divalidasi dan dipetakan otomatis. Upload harian menambahkan histori, sedangkan `idunix` yang sudah ada diperlakukan sebagai koreksi: versi sebelumnya diarsipkan dan versi baru menjadi aktif. Perubahan status/verifikasi hanya dapat dilakukan oleh admin atau auditor; akun wilayah hanya melihat data.
 
@@ -66,7 +67,31 @@ Konfigurasi keamanan deployment minimum:
 - `FEWS_SESSION_SECRET` berupa nilai acak panjang dan stabil;
 - `FEWS_COOKIE_SECURE=true` untuk HTTPS;
 - `DATABASE_URL` Postgres/Supabase agar data persisten;
+- `FEWS_VA_WEBHOOK_SECRET` untuk autentikasi header `X-FEWS-VA-Secret` pada sinkronisasi pembayaran;
+- `CRON_SECRET` untuk runner reminder harian Vercel;
+- `FEWS_COLLECTION_REMINDER_DAYS` bila threshold H+1, H+3, H+7, H+14 perlu diubah (format contoh: `1,3,7,14`);
 - batas bawaan upload adalah 15 MB, 25.000 baris, dan 100 MB ukuran workbook setelah diekstrak. Batas dapat diubah melalui `FEWS_MAX_UPLOAD_BYTES`, `FEWS_MAX_UPLOAD_ROWS`, dan `FEWS_MAX_XLSX_UNCOMPRESSED_BYTES`.
+
+## Integrasi Collection dari Virtual Account
+
+Kirim `POST /api/collection/va` dengan header `X-FEWS-VA-Secret`. Endpoint menerima satu objek, array, atau `{ "items": [...] }`, maksimal 5.000 item per request. `external_id` wajib stabil untuk satu siswa dan cicilan agar kiriman ulang memperbarui data yang sama.
+
+```json
+{
+  "external_id": "VA-134-S001-03",
+  "student_id": "S001",
+  "student_name": "Nama Siswa",
+  "location": "134",
+  "staff_pic": "PIC Lokasi",
+  "installment_number": "3",
+  "amount_due": 1500000,
+  "due_date": "2026-09-01",
+  "outstanding": 500000,
+  "last_payment_at": "2026-09-10T08:30:00Z"
+}
+```
+
+Vercel memanggil `GET /api/collection/reminders/run` setiap hari pukul 08.00 WIB. Route memverifikasi `Authorization: Bearer <CRON_SECRET>` dan tidak membuat reminder ganda untuk task dan level yang sama.
 
 ## Data QA
 
@@ -92,7 +117,7 @@ Loader tidak berjalan otomatis dan tidak mengganti status verifikasi data yang s
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Test mencakup rule SOP, persistence, pembatasan wilayah, master organisasi, mode read-only, akses upload Admin Pusat, pemetaan kode SIL, Alert Center, filter, verifikasi, ranking, Excel, loader data, performa query, dan route legacy yang dinonaktifkan.
+Test mencakup rule SOP, persistence, pembatasan wilayah, master organisasi, mode read-only audit, akses upload Admin Pusat, pemetaan kode SIL, Alert Center, filter, verifikasi, ranking, Excel, loader data, performa query, route legacy yang dinonaktifkan, sinkronisasi VA, collection wilayah, follow-up, reminder, dan penyelesaian otomatis pembayaran.
 
 ## Deploy
 

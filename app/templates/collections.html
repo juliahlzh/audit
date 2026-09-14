@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header collection-header">
+    <div>
+        <p class="eyebrow">Central Collection Monitoring</p>
+        <h2>Monitoring Tagihan dan Follow-up</h2>
+        <p class="muted">Status pembayaran berasal dari Virtual Account. Aktivitas follow-up dicatat terpisah dan bukan indikator fraud.</p>
+    </div>
+    {% if can_remind %}<a class="secondary-button" href="/collections/attention">Buka Need Attention</a>{% endif %}
+</div>
+
+{% if msg %}<div class="notice success-notice">{{ msg }}</div>{% endif %}
+
+<section class="collection-metric-grid" aria-label="Ringkasan collection">
+    <article class="collection-metric"><span>Total Tagihan</span><strong>{{ summary.total }}</strong><small>Seluruh cicilan pada cakupan akun</small></article>
+    <article class="collection-metric warning"><span>Jatuh Tempo</span><strong>{{ summary.due }}</strong><small>Sampai hari ini</small></article>
+    <article class="collection-metric danger"><span>Overdue</span><strong>{{ summary.overdue }}</strong><small>Lewat jatuh tempo dan belum lunas</small></article>
+    <article class="collection-metric danger"><span>Nominal Overdue</span><strong>Rp {{ "{:,.0f}".format(summary.overdue_amount) }}</strong><small>Outstanding dari cicilan overdue</small></article>
+    <article class="collection-metric success"><span>Sudah Lunas</span><strong>{{ summary.paid }}</strong><small>Terkonfirmasi oleh VA</small></article>
+    <article class="collection-metric"><span>Total Outstanding</span><strong>Rp {{ "{:,.0f}".format(summary.outstanding) }}</strong><small>Semua tagihan belum terselesaikan</small></article>
+</section>
+
+<section class="collection-activity-grid" aria-label="Aktivitas follow-up overdue">
+    <article><span>Sudah Follow-up</span><strong>{{ summary.followed }}</strong></article>
+    <article><span>Belum Follow-up</span><strong>{{ summary.not_followed }}</strong></article>
+    <article><span>Promise to Pay</span><strong>{{ summary.promise }}</strong></article>
+    <article><span>Tidak Merespons</span><strong>{{ summary.unresponsive }}</strong></article>
+    <article><span>Follow-up Jatuh Tempo</span><strong>{{ summary.follow_up_due }}</strong></article>
+</section>
+
+<details class="filter-panel disclosure-panel" {% if filters.payment or filters.collection or filters.location or filters.search %}open{% endif %}>
+    <summary class="disclosure-summary"><span><strong>Filter Collection</strong><small>Pembayaran, aktivitas, lokasi, atau siswa</small></span><span class="toggle-label"></span></summary>
+    <div class="disclosure-body">
+        <form method="get" action="/collections">
+            <div class="filter-grid collection-filter-grid">
+                <div><label>Status Pembayaran</label><select name="payment"><option value="">Semua Status</option>{% for value in ['Overdue','Unpaid','Partial','Paid'] %}<option value="{{ value }}" {% if filters.payment == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+                <div><label>Status Follow-up</label><select name="collection"><option value="">Semua Aktivitas</option><option value="Belum Follow-up" {% if filters.collection == 'Belum Follow-up' %}selected{% endif %}>Belum Follow-up</option>{% for value in follow_up_results %}<option value="{{ value }}" {% if filters.collection == value %}selected{% endif %}>{{ value }}</option>{% endfor %}<option value="Resolved" {% if filters.collection == 'Resolved' %}selected{% endif %}>Resolved</option></select></div>
+                <div><label>Lokasi</label><select name="location"><option value="">Semua Lokasi</option>{% for code, branch in locations %}<option value="{{ code }}" {% if filters.location == code %}selected{% endif %}>{{ code }} · {{ branch }}</option>{% endfor %}</select></div>
+                <div><label>Cari Data</label><input type="search" name="search" value="{{ filters.search }}" placeholder="ID, nama siswa, lokasi, atau PIC"></div>
+            </div>
+            <div class="action-row"><button type="submit">Terapkan Filter</button><a class="secondary-button" href="/collections">Reset</a></div>
+        </form>
+    </div>
+</details>
+
+<section class="panel collection-progress-panel">
+    <div class="collection-section-heading"><div><h3>Progress per Lokasi</h3><p class="muted">Prioritas berdasarkan umur overdue dan kelengkapan follow-up.</p></div><small>Reminder bertingkat: {% for day in thresholds %}H+{{ day }}{% if not loop.last %}, {% endif %}{% endfor %}</small></div>
+    <div class="table-responsive">
+        <table class="collection-table compact-table">
+            <thead><tr><th>Lokasi</th><th>Wilayah</th><th>Overdue</th><th>Sudah</th><th>Belum</th><th>PTP</th><th>Progress</th><th>Label</th></tr></thead>
+            <tbody>{% for row in location_rows %}<tr><td><strong>{{ row.code }} · {{ row.branch }}</strong></td><td>{{ row.region }}</td><td>{{ row.overdue }}</td><td>{{ row.followed }}</td><td>{{ row.not_followed }}</td><td>{{ row.promise }}</td><td><div class="progress-track"><span style="width: {{ row.progress }}%"></span></div><small>{{ row.progress }}%</small></td><td><span class="collection-label label-{{ row.label|lower|replace(' ', '-') }}">{{ row.label }}</span></td></tr>{% else %}<tr><td colspan="8">Belum ada cicilan overdue pada cakupan ini.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel collection-list-panel">
+    <div class="collection-section-heading">
+        <div><h3>Daftar Cicilan</h3><p class="muted">{{ pagination.total_rows }} data, {{ pagination.per_page }} per halaman.</p></div>
+        <div class="pager">
+            {% set query_base = 'payment=' ~ (filters.payment|urlencode) ~ '&collection=' ~ (filters.collection|urlencode) ~ '&location=' ~ (filters.location|urlencode) ~ '&search=' ~ (filters.search|urlencode) ~ '&per_page=' ~ filters.per_page %}
+            {% if pagination.has_prev %}<a href="/collections?{{ query_base }}&page={{ pagination.page - 1 }}">Sebelumnya</a>{% else %}<span class="disabled">Sebelumnya</span>{% endif %}
+            <strong>{{ pagination.page }} / {{ pagination.total_pages }}</strong>
+            {% if pagination.has_next %}<a href="/collections?{{ query_base }}&page={{ pagination.page + 1 }}">Berikutnya</a>{% else %}<span class="disabled">Berikutnya</span>{% endif %}
+        </div>
+    </div>
+    <div class="collection-card-list">
+        {% for task in tasks %}
+        <article class="collection-card label-border-{{ task.attention|lower|replace(' ', '-') }}">
+            <div class="collection-card-top">
+                <div><span class="collection-label label-{{ task.attention|lower|replace(' ', '-') }}">{{ task.attention }}</span><h4>{{ task.student_name }}</h4><p>{{ task.student_id }} · Cicilan {{ task.installment_number }}</p></div>
+                <div class="collection-status-stack"><span class="payment-status payment-{{ task.payment_status|lower }}">{{ task.payment_status }}</span><span class="collection-state">{{ task.collection_status }}</span></div>
+            </div>
+            <dl class="collection-detail-grid">
+                <div><dt>Lokasi</dt><dd>{{ task.location_code }} · {{ task.branch_name }}<small>{{ task.area }} · {{ task.region }}</small></dd></div>
+                <div><dt>PIC</dt><dd>{{ task.staff_pic or '-' }}</dd></div>
+                <div><dt>Jatuh Tempo</dt><dd>{{ task.due_date|date_id }}{% if task.overdue_days_value %}<small>{{ task.overdue_days_value }} hari overdue</small>{% endif %}</dd></div>
+                <div><dt>Outstanding</dt><dd>Rp {{ "{:,.0f}".format(task.outstanding) }}<small>dari Rp {{ "{:,.0f}".format(task.amount_due) }}</small></dd></div>
+                <div><dt>Follow-up Terakhir</dt><dd>{{ task.last_follow_up_at|datetime_id if task.last_follow_up_at else '-' }}{% if task.next_follow_up_date %}<small>Berikutnya {{ task.next_follow_up_date|date_id }}</small>{% endif %}</dd></div>
+                <div><dt>Reminder</dt><dd>Level {{ task.reminder_level }}{% if task.last_reminder_at %}<small>{{ task.last_reminder_at|datetime_id }}</small>{% endif %}</dd></div>
+            </dl>
+            {% if task.last_note %}<p class="collection-note"><strong>Catatan:</strong> {{ task.last_note }}</p>{% endif %}
+            <div class="collection-actions">
+                {% if task.payment_status != 'Paid' %}
+                <details class="inline-disclosure collection-action-form">
+                    <summary>Catat Follow-up</summary>
+                    <form method="post" action="/collections/{{ task.id }}/follow-up">
+                        <label>Hasil</label><select name="result" required>{% for value in follow_up_results %}<option value="{{ value }}">{{ 'Customer akan bayar / Promise to Pay' if value == 'Promise to Pay' else value }}</option>{% endfor %}</select>
+                        <label>Follow-up Berikutnya</label><input type="date" name="next_follow_up_date">
+                        <label>Catatan</label><textarea name="note" maxlength="2000" rows="2" placeholder="Opsional"></textarea>
+                        <button type="submit">Simpan Follow-up</button>
+                        <small>Status “Customer sudah bayar” tetap menunggu konfirmasi VA.</small>
+                    </form>
+                </details>
+                {% endif %}
+                {% if can_remind and task.payment_status == 'Overdue' %}<form method="post" action="/collections/{{ task.id }}/remind"><button class="secondary-button" type="submit">Catat Reminder</button></form>{% endif %}
+                {% if task.activities or task.reminders %}
+                <details class="inline-disclosure collection-history"><summary>Riwayat ({{ task.activities|length + task.reminders|length }})</summary><ul>{% for item in task.activities|sort(attribute='created_at', reverse=true) %}<li><strong>{{ item.result }}</strong> · {{ item.created_at|datetime_id }}{% if item.note %}<span>{{ item.note }}</span>{% endif %}</li>{% endfor %}{% for item in task.reminders|sort(attribute='created_at', reverse=true) %}<li><strong>Reminder level {{ item.level }}</strong> · {{ item.created_at|datetime_id }}<span>{{ item.message }}</span></li>{% endfor %}</ul></details>
+                {% endif %}
+            </div>
+        </article>
+        {% else %}<div class="empty-state">Belum ada data collection untuk filter ini.</div>{% endfor %}
+    </div>
+</section>
+{% endblock %}

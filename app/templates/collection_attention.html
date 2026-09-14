@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header collection-header">
+    <div><p class="eyebrow">Central Collection Monitoring</p><h2>Need Attention</h2><p class="muted">Daftar prioritas nasional. Escalation berarti tindak lanjut perlu dipercepat, bukan indikasi fraud.</p></div>
+    <a class="secondary-button" href="/collections">Kembali ke Collection</a>
+</div>
+{% if msg %}<div class="notice success-notice">{{ msg }}</div>{% endif %}
+<section class="panel collection-progress-panel">
+    <div class="collection-section-heading"><div><h3>Lokasi yang Perlu Diingatkan</h3><p class="muted">Satu aksi mencatat reminder untuk seluruh cicilan overdue pada lokasi tersebut.</p></div></div>
+    <div class="table-responsive">
+        <table class="collection-table compact-table">
+            <thead><tr><th>Lokasi</th><th>Wilayah</th><th>Overdue</th><th>Belum Follow-up</th><th>Progress</th><th>Prioritas</th><th>Aksi</th></tr></thead>
+            <tbody>{% for row in location_rows %}<tr><td><strong>{{ row.code }} · {{ row.branch }}</strong></td><td>{{ row.region }}</td><td>{{ row.overdue }}</td><td>{{ row.not_followed }}</td><td>{{ row.progress }}%</td><td><span class="collection-label label-{{ row.label|lower|replace(' ', '-') }}">{{ row.label }}</span></td><td><form method="post" action="/collections/location/{{ row.code }}/remind"><button type="submit">Remind Lokasi</button></form></td></tr>{% else %}<tr><td colspan="7">Tidak ada lokasi dengan cicilan overdue.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+<section class="panel collection-list-panel">
+    <div class="collection-section-heading"><div><h3>Prioritas Follow-up</h3><p class="muted">{{ pagination.total_rows }} cicilan berdasarkan umur overdue, outstanding, PTP terlewat, dan status follow-up.</p></div><div class="pager">{% if pagination.has_prev %}<a href="/collections/attention?page={{ pagination.page - 1 }}&per_page={{ pagination.per_page }}">Sebelumnya</a>{% else %}<span class="disabled">Sebelumnya</span>{% endif %}<strong>{{ pagination.page }} / {{ pagination.total_pages }}</strong>{% if pagination.has_next %}<a href="/collections/attention?page={{ pagination.page + 1 }}&per_page={{ pagination.per_page }}">Berikutnya</a>{% else %}<span class="disabled">Berikutnya</span>{% endif %}</div></div>
+    <div class="table-responsive">
+        <table class="collection-table attention-table">
+            <thead><tr><th>Prioritas</th><th>Siswa</th><th>Lokasi / PIC</th><th>Jatuh Tempo</th><th>Outstanding</th><th>Follow-up</th><th>PTP / Aksi Berikutnya</th><th>Reminder</th></tr></thead>
+            <tbody>{% for task in tasks %}<tr><td><span class="collection-label label-{{ task.attention|lower|replace(' ', '-') }}">{{ task.attention }}</span></td><td><strong>{{ task.student_name }}</strong><small>{{ task.student_id }} · Cicilan {{ task.installment_number }}</small></td><td><strong>{{ task.location_code }} · {{ task.branch_name }}</strong><small>{{ task.region }} · {{ task.staff_pic or 'PIC belum diisi' }}</small></td><td>{{ task.due_date|date_id }}<small>{{ task.overdue_days_value }} hari overdue</small></td><td><strong>Rp {{ "{:,.0f}".format(task.outstanding) }}</strong></td><td>{{ task.collection_status }}<small>{{ task.last_follow_up_at|datetime_id if task.last_follow_up_at else 'Belum ada update' }}</small></td><td>{{ task.promise_to_pay_date|date_id if task.promise_to_pay_date else '-' }}<small>{{ task.next_follow_up_date|date_id if task.next_follow_up_date else 'Belum dijadwalkan' }}</small></td><td><form method="post" action="/collections/{{ task.id }}/remind"><button type="submit">Catat H+{{ task.overdue_days_value }}</button></form><small>Level saat ini {{ task.reminder_level }}</small></td></tr>{% else %}<tr><td colspan="8">Tidak ada cicilan yang memerlukan perhatian khusus.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import zipfile
 from time import perf_counter
 from pathlib import Path
@@ -17,10 +18,10 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, text
+from sqlalchemy import case, func, or_, text
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import verify_password
@@ -35,7 +36,16 @@ from .config import (
 )
 from .database import Base, SessionLocal, engine, get_db, raw_database_url
 from .dependencies import get_current_user, require_central_admin, require_roles
-from .models import AuditLog, BankMutation, BranchInput, MatchingResult, User
+from .models import (
+    AuditLog,
+    BankMutation,
+    BranchInput,
+    CollectionActivity,
+    CollectionReminder,
+    CollectionTask,
+    MatchingResult,
+    User,
+)
 from .seed import seed_data
 from .services.branch_inputs import (
     archive_all_branch_inputs_with_results,
@@ -43,6 +53,21 @@ from .services.branch_inputs import (
     permanently_delete_all_archived_branch_inputs,
     permanently_delete_branch_input_with_results,
     restore_branch_input_with_results,
+)
+from .services.collection import (
+    FOLLOW_UP_RESULTS,
+    attention_label,
+    collection_summary,
+    location_progress_for_query,
+    overdue_days,
+    record_follow_up,
+    record_location_reminders,
+    record_reminder,
+    refresh_overdue_statuses,
+    reminder_thresholds,
+    run_automatic_reminders,
+    scoped_collection_query,
+    ingest_va_payload,
 )
 from .services.analytics import (
     build_global_location_ranking,
@@ -207,6 +232,8 @@ def _ensure_import_text_capacity() -> None:
         return
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(60322026)"))
+        for table in (CollectionTask.__table__, CollectionActivity.__table__, CollectionReminder.__table__):
+            table.create(bind=conn, checkfirst=True)
         column_types = dict(
             conn.execute(
                 text(
@@ -848,6 +875,256 @@ def dashboard(
         "database_warning": get_database_warning(),
     }
     return templates.TemplateResponse(request=request, name="dashboard.html", context=context)
+
+
+def _collection_task_for_user(db: Session, user: User, task_id: int) -> CollectionTask:
+    task = scoped_collection_query(db, user).filter(CollectionTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Data collection tidak ditemukan pada cakupan akun ini")
+    return task
+
+
+def _decorate_collection_tasks(tasks: list[CollectionTask]) -> None:
+    for task in tasks:
+        task.overdue_days_value = overdue_days(task)
+        task.attention = attention_label(task)
+
+
+@app.get("/collections", response_class=HTMLResponse)
+def collections_page(
+    request: Request,
+    payment: str = "",
+    collection: str = "",
+    location: str = "",
+    search: str = "",
+    msg: str = "",
+    page: int = 1,
+    per_page: int = 25,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    refresh_overdue_statuses(db)
+    page = max(1, page)
+    per_page = min(max(10, per_page), 100)
+    base_query = scoped_collection_query(db, user)
+    query = base_query
+    if payment:
+        query = query.filter(CollectionTask.payment_status == payment)
+    if collection:
+        query = query.filter(CollectionTask.collection_status == collection)
+    if location:
+        query = query.filter(CollectionTask.location_code == location)
+    if search.strip():
+        term = f"%{search.strip()}%"
+        query = query.filter(or_(
+            CollectionTask.student_id.ilike(term),
+            CollectionTask.student_name.ilike(term),
+            CollectionTask.branch_name.ilike(term),
+            CollectionTask.staff_pic.ilike(term),
+        ))
+
+    total_rows = query.count()
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    payment_priority = case(
+        (CollectionTask.payment_status == "Overdue", 0),
+        (CollectionTask.payment_status == "Unpaid", 1),
+        (CollectionTask.payment_status == "Partial", 2),
+        else_=3,
+    )
+    tasks = (
+        query.options(selectinload(CollectionTask.activities), selectinload(CollectionTask.reminders))
+        .order_by(payment_priority, CollectionTask.due_date.asc(), CollectionTask.outstanding.desc(), CollectionTask.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    _decorate_collection_tasks(tasks)
+    locations = base_query.with_entities(
+        CollectionTask.location_code, CollectionTask.branch_name
+    ).distinct().order_by(CollectionTask.branch_name).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="collections.html",
+        context={
+            "user": user,
+            "tasks": tasks,
+            "summary": collection_summary(db, user),
+            "location_rows": location_progress_for_query(base_query),
+            "locations": locations,
+            "follow_up_results": sorted(FOLLOW_UP_RESULTS),
+            "thresholds": reminder_thresholds(),
+            "can_remind": user.role == "admin" and not user.region,
+            "msg": msg,
+            "filters": {"payment": payment, "collection": collection, "location": location, "search": search, "per_page": per_page},
+            "pagination": {
+                "page": page, "per_page": per_page, "total_rows": total_rows,
+                "total_pages": total_pages, "has_prev": page > 1, "has_next": page < total_pages,
+            },
+        },
+    )
+
+
+@app.get("/collections/attention", response_class=HTMLResponse)
+def collection_attention_page(
+    request: Request,
+    msg: str = "",
+    page: int = 1,
+    per_page: int = 25,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    refresh_overdue_statuses(db)
+    page = max(1, page)
+    per_page = min(max(10, per_page), 100)
+    today = date.today()
+    no_progress = CollectionTask.collection_status.in_(["Belum Follow-up", "Tidak Merespons", "Tidak Dapat Dihubungi"])
+    query = scoped_collection_query(db, user).filter(CollectionTask.payment_status == "Overdue")
+    total_rows = query.count()
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    escalation_priority = case(
+        ((CollectionTask.due_date <= today - timedelta(days=14)) & no_progress, 0),
+        (CollectionTask.promise_to_pay_date < today, 1),
+        (CollectionTask.collection_status == "Belum Follow-up", 2),
+        (CollectionTask.next_follow_up_date.is_(None), 3),
+        ((CollectionTask.reminder_level > 0) & no_progress, 4),
+        else_=5,
+    )
+    tasks = (
+        query.options(selectinload(CollectionTask.activities), selectinload(CollectionTask.reminders))
+        .order_by(escalation_priority, CollectionTask.due_date.asc(), CollectionTask.outstanding.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    _decorate_collection_tasks(tasks)
+    return templates.TemplateResponse(
+        request=request,
+        name="collection_attention.html",
+        context={
+            "user": user,
+            "tasks": tasks,
+            "location_rows": location_progress_for_query(scoped_collection_query(db, user)),
+            "msg": msg,
+            "pagination": {
+                "page": page, "per_page": per_page, "total_rows": total_rows,
+                "total_pages": total_pages, "has_prev": page > 1, "has_next": page < total_pages,
+            },
+        },
+    )
+
+
+@app.post("/collections/{task_id}/follow-up")
+def collection_follow_up(
+    task_id: int,
+    result: str = Form(...),
+    next_follow_up_date: str = Form(""),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    task = _collection_task_for_user(db, user, task_id)
+    if task.payment_status == "Paid":
+        raise HTTPException(status_code=409, detail="Data sudah lunas berdasarkan VA dan tidak memerlukan follow-up")
+    next_date = None
+    if next_follow_up_date:
+        try:
+            next_date = date.fromisoformat(next_follow_up_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Tanggal follow-up tidak valid") from exc
+    if len(note) > 2000:
+        raise HTTPException(status_code=400, detail="Catatan maksimal 2.000 karakter")
+    try:
+        record_follow_up(db, task, user, result, next_date, note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"/collections?msg={quote('Follow-up berhasil disimpan')}", status_code=303)
+
+
+@app.post("/collections/{task_id}/remind")
+def collection_remind(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    task = _collection_task_for_user(db, user, task_id)
+    if task.payment_status != "Overdue":
+        raise HTTPException(status_code=409, detail="Reminder hanya dapat dicatat untuk cicilan overdue")
+    level = record_reminder(db, task, user).level
+    return RedirectResponse(
+        f"/collections/attention?msg={quote(f'Reminder level {level} berhasil dicatat')}", status_code=303
+    )
+
+
+@app.post("/collections/location/{location_code}/remind")
+def collection_location_remind(
+    location_code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_central_admin),
+):
+    tasks = scoped_collection_query(db, user).filter(
+        CollectionTask.location_code == location_code,
+        CollectionTask.payment_status == "Overdue",
+    ).all()
+    if not tasks:
+        raise HTTPException(status_code=404, detail="Tidak ada cicilan overdue pada lokasi ini")
+    count = record_location_reminders(db, tasks, user)
+    return RedirectResponse(
+        f"/collections/attention?msg={quote(f'{count} reminder lokasi berhasil dicatat')}", status_code=303
+    )
+
+
+@app.post("/api/collection/va")
+async def collection_va_webhook(request: Request, db: Session = Depends(get_db)):
+    configured_secret = os.getenv("FEWS_VA_WEBHOOK_SECRET", "").strip()
+    if IS_PRODUCTION and not configured_secret:
+        raise HTTPException(status_code=503, detail="FEWS_VA_WEBHOOK_SECRET belum dikonfigurasi")
+    if configured_secret:
+        provided_secret = request.headers.get("X-FEWS-VA-Secret", "")
+        if not secrets.compare_digest(provided_secret, configured_secret):
+            raise HTTPException(status_code=401, detail="Secret webhook VA tidak valid")
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Body harus berupa JSON valid") from exc
+    items = payload.get("items") if isinstance(payload, dict) and "items" in payload else payload
+    if isinstance(items, dict):
+        items = [items]
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Payload harus berisi objek atau daftar items")
+    if len(items) > 5000:
+        raise HTTPException(status_code=413, detail="Maksimal 5.000 item per request")
+    created = 0
+    try:
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(f"Item ke-{index} bukan objek")
+            _, was_created = ingest_va_payload(db, item)
+            created += int(was_created)
+        db.add(AuditLog(action="VA collection sync", status="INFO", notes=f"{len(items)} item diterima; {created} baru; {len(items) - created} diperbarui."))
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("VA collection sync failed")
+        raise HTTPException(status_code=500, detail="Sinkronisasi VA gagal disimpan") from exc
+    return {"received": len(items), "created": created, "updated": len(items) - created}
+
+
+@app.get("/api/collection/reminders/run")
+def collection_reminder_runner(request: Request, db: Session = Depends(get_db)):
+    configured_secret = os.getenv("CRON_SECRET", "").strip()
+    if not configured_secret:
+        raise HTTPException(status_code=503, detail="CRON_SECRET belum dikonfigurasi")
+    provided = request.headers.get("Authorization", "")
+    if not secrets.compare_digest(provided, f"Bearer {configured_secret}"):
+        raise HTTPException(status_code=401, detail="Otorisasi cron tidak valid")
+    refresh_overdue_statuses(db)
+    reminders = run_automatic_reminders(db)
+    return {"created": len(reminders), "status": "ok"}
 
 
 @app.get("/rankings", response_class=HTMLResponse)

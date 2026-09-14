@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, event
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -19,6 +19,75 @@ class User(Base):
 
     transactions: Mapped[list["Transaction"]] = relationship("Transaction", back_populates="created_by_user")
     logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="user")
+
+
+class CollectionTask(Base):
+    __tablename__ = "collection_tasks"
+    __table_args__ = (
+        Index("ix_collection_scope_status_due", "region", "payment_status", "due_date"),
+        Index("ix_collection_location_status", "location_code", "payment_status"),
+        Index("ix_collection_attention", "payment_status", "due_date", "outstanding"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    external_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    student_id: Mapped[str] = mapped_column(String(100), index=True)
+    student_name: Mapped[str] = mapped_column(String(180), index=True)
+    location_code: Mapped[str] = mapped_column(String(10), index=True)
+    branch_name: Mapped[str] = mapped_column(String(120), index=True)
+    region: Mapped[str] = mapped_column(String(80), index=True)
+    area: Mapped[str] = mapped_column(String(100), index=True)
+    staff_pic: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    installment_number: Mapped[str] = mapped_column(String(50))
+    amount_due: Mapped[float] = mapped_column(Float)
+    due_date: Mapped[date] = mapped_column(Date, index=True)
+    outstanding: Mapped[float] = mapped_column(Float, index=True)
+    last_payment_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    payment_status: Mapped[str] = mapped_column(String(20), default="Unpaid", index=True)
+    collection_status: Mapped[str] = mapped_column(String(40), default="Belum Follow-up", index=True)
+    last_follow_up_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    next_follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    promise_to_pay_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    last_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reminder_level: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    last_reminder_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    activities: Mapped[list["CollectionActivity"]] = relationship(
+        "CollectionActivity", back_populates="task", cascade="all, delete-orphan"
+    )
+    reminders: Mapped[list["CollectionReminder"]] = relationship(
+        "CollectionReminder", back_populates="task", cascade="all, delete-orphan"
+    )
+
+
+class CollectionActivity(Base):
+    __tablename__ = "collection_activities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("collection_tasks.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    result: Mapped[str] = mapped_column(String(40), index=True)
+    next_follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    task: Mapped[CollectionTask] = relationship("CollectionTask", back_populates="activities")
+
+
+class CollectionReminder(Base):
+    __tablename__ = "collection_reminders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("collection_tasks.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    level: Mapped[int] = mapped_column(Integer, index=True)
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    task: Mapped[CollectionTask] = relationship("CollectionTask", back_populates="reminders")
 
 
 class Transaction(Base):

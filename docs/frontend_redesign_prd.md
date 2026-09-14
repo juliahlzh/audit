@@ -4,14 +4,43 @@
 
 Memperbarui FEWS menjadi layar monitoring audit berbasis Wilayah → Area → Lokasi yang mengikuti SOP dan layout FEWS terbaru. Aplikasi tetap memakai FastAPI, Jinja, SQLAlchemy, CSS, dan JavaScript ringan.
 
+FEWS juga menyediakan **Central Collection Monitoring & Reminder**. Modul ini membantu tim pusat memastikan aktivitas penagihan cicilan customer tidak terlewat. Overdue adalah status pembayaran customer dan tidak boleh langsung diperlakukan sebagai kesalahan atau fraud staff lokasi.
+
+## Central Collection Monitoring & Reminder
+
+### Pengguna dan nilai utama
+
+- Tim pusat melihat posisi overdue nasional, outstanding, aktivitas follow-up, promise to pay, reminder, dan lokasi yang perlu perhatian.
+- Staff/admin wilayah hanya melihat collection task wilayahnya dan memberi update singkat setelah menghubungi customer.
+- FEWS memonitor proses. FEWS tidak menagih customer secara otomatis dan tidak mengirim pesan langsung ke customer.
+
+### Data dan status
+
+- Webhook/API VA menerima ID cicilan eksternal, siswa, lokasi, PIC, nomor cicilan, nominal tagihan, due date, outstanding, dan last payment.
+- `Payment Status` terpisah dari `Collection Activity`.
+- Payment status: `Paid`, `Partial`, `Unpaid`, atau `Overdue`.
+- Collection status: `Belum Follow-up`, `Sudah Follow-up`, `Promise to Pay`, `Minta Waktu`, `Tidak Merespons`, `Tidak Dapat Dihubungi`, `Kendala Pembayaran`, `Lainnya`, atau `Resolved`.
+- Due date yang sudah lewat dengan outstanding di atas nol otomatis menjadi `Overdue`.
+- Pembayaran VA dengan outstanding nol otomatis menjadi `Paid` dan collection task menjadi `Resolved`, dengan histori aktivitas tetap disimpan.
+- ID eksternal bersifat idempoten: kiriman ulang memperbarui task yang sama dan tidak menggandakan data.
+
+### Dashboard dan aksi
+
+- Menu `Collection` menampilkan total jatuh tempo, overdue, nominal overdue, paid, outstanding, sudah/belum follow-up, promise to pay, tidak merespons, dan perlu follow-up kembali.
+- Ringkasan lokasi menampilkan overdue, sudah/belum follow-up, promise to pay, progress, serta label `Monitoring`, `Needs Attention`, atau `Escalation`.
+- Menu `Need Attention` untuk pusat memprioritaskan overdue paling lama, outstanding terbesar, belum ada follow-up, tidak ada update setelah reminder, promise to pay yang lewat, dan task tanpa next action.
+- Staff memperbarui task dengan satu hasil follow-up, next follow-up opsional, dan catatan singkat.
+- Tim pusat dapat mencatat reminder kepada staff lokasi. Integrasi WhatsApp/email berada di luar MVP sampai channel dan kredensial resminya ditentukan.
+- Threshold reminder berasal dari konfigurasi dan default pada H+1, H+3, H+7, dan H+14.
+
 ## Navigasi dan hak akses
 
-- **Admin Pusat**: Dashboard Pusat, Info, Laporan, Alert Center, dan Upload Data Excel.
-- **Admin Wilayah**: Dashboard Wilayah, Laporan, dan Alert Center dalam mode view-only.
+- **Admin Pusat**: Dashboard Pusat, Info, Laporan, Alert Center, Collection, Need Attention, dan Upload Data Excel.
+- **Admin Wilayah**: Dashboard Wilayah, Laporan, Alert Center dalam mode view-only audit, serta Collection wilayah untuk update follow-up sederhana.
 - Satu akun Admin Wilayah dibuat untuk setiap 15 wilayah pada master organisasi.
 - Admin Pusat dapat melihat seluruh wilayah dan menjadi satu-satunya tipe akun yang dapat mengunggah Excel approval ke FEWS.
 - Upload harian bersifat append untuk `idunix` baru. Jika `idunix` sudah ada, versi lama diarsipkan sebagai audit trail dan versi baru menjadi data aktif.
-- Admin Wilayah tidak dapat upload, input manual, mengarsipkan data, mengubah verifikasi, atau mengubah tindak lanjut.
+- Admin Wilayah tidak dapat upload, input manual, mengarsipkan data, mengubah verifikasi, atau mengubah tindak lanjut audit. Admin Wilayah hanya dapat memperbarui aktivitas pada task Collection wilayahnya.
 - Detail KPI, grafik, laporan, temuan, ekspor, dan Alert Center akun wilayah hanya memuat data wilayah tersebut.
 - Ranking wilayah pada Dashboard bersifat dashboard umum/nasional dan tetap dapat dilihat akun wilayah tanpa membuka invoice atau detail wilayah lain.
 - Seluruh indikator dan informasi dashboard awal dipindahkan ke menu `Info`; modal ringkasan lama dihapus. Menu ini hanya tersedia untuk Admin Pusat dan tidak mengembalikan input manual yang sudah dinonaktifkan.
@@ -128,7 +157,7 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Transaksi Double Input ditampilkan berkelompok berdasarkan fingerprint duplikat.
 - Upload `.xlsx`/`.csv` memvalidasi tipe file, ukuran, ukuran ekstraksi workbook, jumlah baris, duplikasi `idunix`, dan kode lokasi sebelum mutasi data.
 - Upload hari berikutnya mempertahankan histori hari sebelumnya; koreksi dengan `idunix` sama tidak menghasilkan dua versi aktif.
-- Route `/`, `/login`, `/dashboard`, `/alerts`, `/reports`, `/branch-inputs`, `/archives`, dan `/health` tidak boleh menghasilkan 404 pada runtime Vercel.
+- Route `/`, `/login`, `/dashboard`, `/alerts`, `/reports`, `/branch-inputs`, `/archives`, `/collections`, `/collections/attention`, dan `/health` tidak boleh menghasilkan 404 pada runtime Vercel sesuai hak aksesnya.
 - Upload sampai 25.000 baris (target operasional sekitar 22.000 baris) diproses secara batch dan seluruh daftar aktif/arsip memakai pagination berbasis database.
 - Kolom uraian pelanggan/siswa dan referensi bukti menerima teks panjang dari format Excel operasional; kegagalan database harus rollback seluruh batch dan kembali ke halaman upload dengan pesan yang dapat dipahami, bukan response 500.
 - Admin Pusat dapat mengarsipkan data aktif, melihat arsip berpaginasi, memulihkan data, lalu menghapus permanen data arsip beserta seluruh `MatchingResult` terkait.
@@ -142,9 +171,16 @@ Ekspor PDF dan Excel harus mengikuti filter aktif dan selalu dibatasi ke satu wi
 - Grafik batang wilayah/lokasi, grafik garis tren periode, grafik indikator, top/bottom 10, tabel detail, tindak lanjut otomatis, dataset sintetis, dan ekspor tetap berfungsi.
 - Informasi yang tampil pada Dashboard dan Laporan mempunyai padanan data pada PDF dan Excel untuk filter wilayah yang sama.
 - Regression test serta QA desktop/mobile lulus tanpa error console atau overflow kritis.
+- Webhook VA menolak request tanpa secret pada production, menerima payload tunggal maupun batch, dan idempoten berdasarkan ID cicilan eksternal.
+- Overdue dihitung dari due date dan outstanding; overdue customer tidak menambah skor fraud atau kesalahan staff.
+- Payment `Paid` dari VA menyelesaikan collection task tanpa menghapus histori follow-up dan promise to pay.
+- Dashboard Collection pusat dan wilayah selalu mengikuti scope akses wilayah.
+- Akun wilayah dapat memperbarui aktivitas collection miliknya tetapi tetap tidak dapat mengubah verifikasi atau tindak lanjut audit.
+- Reminder bertingkat H+1/H+3/H+7/H+14 dapat dikonfigurasi dan dicatat sebagai histori; label tidak menggunakan istilah fraud.
+- Need Attention memprioritaskan umur overdue, outstanding, ketiadaan follow-up/update, promise to pay terlewat, dan ketiadaan next action.
 
 ## Batasan
 
-- Tidak ada integrasi sumber produksi baru pada perubahan ini.
+- Integrasi produksi baru dibatasi pada endpoint webhook/API VA. Kredensial, mapping payload final, retry, signature provider, dan channel reminder eksternal harus dikonfirmasi sebelum go-live dengan provider.
 - Data sintetis tidak boleh disebut sebagai data real produksi.
 - Route legacy input/upload boleh dipertahankan hanya sebagai redirect/response aman dan tidak boleh muncul sebagai fungsi yang dapat digunakan.
